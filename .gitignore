@@ -60,3 +60,4 @@ backend/app/models/__pycache__/enrollment.cpython-312.pyc
 *.pyc
 /backend/models
 backend/models.rar
+backend/models.zip
