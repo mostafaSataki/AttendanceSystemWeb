@@ -48,3 +48,14 @@ prompt
 
 server.log
 /version
+/backend/app/services/face_engine/__pycache__
+backend/app/core/__pycache__/model_config.cpython-312.pyc
+backend/app/models/__pycache__/enrollment.cpython-312.pyc
+/backend/.venv
+/backend/app/__pycache__
+/backend/app/api/__pycache__
+/backend/app/api/endpoints/__pycache__
+/backend/app/core/__pycache__
+/backend/app/services/__pycache__
+*.pyc
+/backend/models

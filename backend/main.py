@@ -1,56 +1,92 @@
-from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File
+#!/usr/bin/env python3
+"""
+FastAPI Backend for Attendance System Web Application
+"""
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
+import uvicorn
 import os
-from dotenv import load_dotenv
+import sys
+from pathlib import Path
 
-from config.database import engine, get_db
-from models import models
-from routes import auth, persons, enrollment
-from services.face_service import FaceService
+# Add the app directory to Python path
+sys.path.insert(0, str(Path(__file__).parent))
 
-# Load environment variables
-load_dotenv()
+from app.api.endpoints import enrollment, recognition, people, poses
+from app.core.config import settings
+from app.services.face_recognition_service import FaceRecognitionService
 
-# Create database tables
-models.Base.metadata.create_all(bind=engine)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager"""
+    # Startup
+    print("🚀 Starting Face Recognition Service...")
+    app.state.face_service = FaceRecognitionService()
+    
+    try:
+        # Initialize the face recognition service
+        await app.state.face_service.initialize()
+        print("✅ Face Recognition Service initialized successfully")
+    except Exception as e:
+        print(f"❌ Failed to initialize Face Recognition Service: {e}")
+        # Continue anyway - the service can be initialized later
+    
+    yield
+    
+    # Shutdown
+    print("🛑 Shutting down Face Recognition Service...")
+    if hasattr(app.state, 'face_service'):
+        await app.state.face_service.cleanup()
+
 
 app = FastAPI(
-    title="Attendance System Backend",
-    description="Backend API for Face Recognition Attendance System",
-    version="1.0.0"
+    title="Attendance System API",
+    description="Face Recognition Attendance System Backend API",
+    version="1.0.0",
+    lifespan=lifespan
 )
 
-# CORS middleware
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Security
-security = HTTPBearer()
+# Include API routers
+app.include_router(enrollment.router, prefix="/api/enrollment", tags=["enrollment"])
+app.include_router(recognition.router, prefix="/api/recognition", tags=["recognition"])
+app.include_router(people.router, prefix="/api/people", tags=["people"])
+app.include_router(poses.router, prefix="/api/poses", tags=["poses"])
 
-# Initialize face service
-face_service = FaceService()
-
-# Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(persons.router, prefix="/api/persons", tags=["Persons"])
-app.include_router(enrollment.router, prefix="/api/enrollment", tags=["Enrollment"])
 
 @app.get("/")
 async def root():
-    return {"message": "Attendance System Backend API"}
+    """Root endpoint"""
+    return {"message": "Attendance System API", "version": "1.0.0"}
+
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "face-recognition-api",
+        "face_service_status": hasattr(app.state, 'face_service') and app.state.face_service.is_initialized
+    }
+
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )

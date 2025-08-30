@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -15,9 +14,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
+import { User, UserPlus, Camera, BarChart3, Users, Eye, ImagePlus, Images } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import apiService from '@/services/api'
+import { useEffect } from 'react'
 
 export default function FaceRecognitionSystem() {
   const [mainTab, setMainTab] = useState('recognition')
+  const [enrollmentTab, setEnrollmentTab] = useState('live-enrollment')
+  const [collectedPoses, setCollectedPoses] = useState([])
+  const [enrollmentPoses, setEnrollmentPoses] = useState([])
+  const [personPoses, setPersonPoses] = useState([])
+  const poseOrder = ['FRONT', 'LEFT', 'RIGHT', 'UP', 'DOWN']
+  const [selectedPersonId, setSelectedPersonId] = useState('')
+  const [reviewingPersonId, setReviewingPersonId] = useState(null)
+  const [reviewMode, setReviewMode] = useState('enrollment') // 'enrollment' or 'person'
+  const [hasCompletedEnrollment, setHasCompletedEnrollment] = useState(false)
   const [recognitionSource, setRecognitionSource] = useState('video')
   const [videoFilePath, setVideoFilePath] = useState('')
   const [rtspUrl, setRtspUrl] = useState('')
@@ -152,77 +164,8 @@ export default function FaceRecognitionSystem() {
   const [enrollmentSource, setEnrollmentSource] = useState('video')
   const [enrollmentVideoFilePath, setEnrollmentVideoFilePath] = useState('')
   const [enrollmentRtspUrl, setEnrollmentRtspUrl] = useState('')
-  const [people, setPeople] = useState([
-    {
-      id: 1,
-      first_name: "John",
-      last_name: "Doe",
-      personnel_code: "EMP001",
-      department: "IT",
-      position: "Software Engineer",
-      email: "john.doe@company.com",
-      phone: "+98-21-12345678",
-      is_active: true,
-      created_at: "2024-01-10T10:30:00Z",
-      enrollments: [
-        {
-          id: 1,
-          person_id: 1,
-          face_encoding_path: "/uploads/encodings/emp001.pkl",
-          face_image_path: "/uploads/images/emp001.jpg",
-          confidence_score: 95,
-          is_active: true,
-          created_at: "2024-01-10T10:30:00Z"
-        }
-      ]
-    },
-    {
-      id: 2,
-      first_name: "Jane",
-      last_name: "Smith",
-      personnel_code: "EMP002",
-      department: "HR",
-      position: "HR Manager",
-      email: "jane.smith@company.com",
-      phone: "+98-21-87654321",
-      is_active: true,
-      created_at: "2024-01-11T14:20:00Z",
-      enrollments: [
-        {
-          id: 2,
-          person_id: 2,
-          face_encoding_path: "/uploads/encodings/emp002.pkl",
-          face_image_path: "/uploads/images/emp002.jpg",
-          confidence_score: 87,
-          is_active: true,
-          created_at: "2024-01-11T14:20:00Z"
-        }
-      ]
-    },
-    {
-      id: 3,
-      first_name: "Ahmed",
-      last_name: "Hassan",
-      personnel_code: "EMP003",
-      department: "Finance",
-      position: "Financial Analyst",
-      email: "ahmed.hassan@company.com",
-      phone: "+98-21-11223344",
-      is_active: false,
-      created_at: "2024-01-12T09:15:00Z",
-      enrollments: [
-        {
-          id: 3,
-          person_id: 3,
-          face_encoding_path: "/uploads/encodings/emp003.pkl",
-          face_image_path: "/uploads/images/emp003.jpg",
-          confidence_score: 92,
-          is_active: false,
-          created_at: "2024-01-12T09:15:00Z"
-        }
-      ]
-    }
-  ])
+  const [people, setPeople] = useState([])
+  const [loading, setLoading] = useState(false)
   const [personForm, setPersonForm] = useState({
     first_name: '',
     last_name: '',
@@ -233,6 +176,29 @@ export default function FaceRecognitionSystem() {
     phone: ''
   })
   const [isEnrolling, setIsEnrolling] = useState(false)
+  
+  // Fetch people from API on component mount
+  useEffect(() => {
+    const fetchPeople = async () => {
+      try {
+        setLoading(true)
+        const response = await apiService.getPeople()
+        setPeople(Array.isArray(response) ? response : response.items || [])
+      } catch (error) {
+        console.error('Failed to fetch people:', error)
+        setPeople([]) // Set empty array on error
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchPeople()
+  }, [])
+  
+  const employees = [
+    {
+      id: 1,
+      name: "John Doe",
       personnelCode: "EMP001",
       department: "IT Department",
       position: "Software Engineer",
@@ -286,10 +252,10 @@ export default function FaceRecognitionSystem() {
       image: "/api/placeholder/64/64",
       confidence: 89
     }
-  ])
+  ]
+  
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
-  const [isEnrolling, setIsEnrolling] = useState(false)
   const [enrollmentStatus, setEnrollmentStatus] = useState('Ready')
   const [isRecognizing, setIsRecognizing] = useState(false)
   const [detectionResults, setDetectionResults] = useState<string[]>([])
@@ -368,6 +334,128 @@ export default function FaceRecognitionSystem() {
     setDetectionResults([])
   }
 
+  // Face samples functions
+  const handleViewPersonPoses = async (personId) => {
+    try {
+      setLoading(true)
+      console.log('Loading poses for person:', personId)
+      
+      // Fetch person's poses from backend
+      const poses = await apiService.getPersonPoses(personId)
+      console.log('Fetched poses:', poses)
+      
+      // Convert poses to numbered format and sort by creation time
+      const numberedPoses = poses.map((pose, index) => ({
+        id: pose.id || index + 1,
+        number: index + 1,
+        pose: pose.pose_type || `Sample ${index + 1}`,
+        image: pose.image_path || '/api/placeholder/120/120',
+        quality: pose.quality_score || 0,
+        created_at: pose.created_at,
+        type: 'saved' // Mark as saved pose
+      }))
+      
+      setPersonPoses(numberedPoses)
+      setReviewingPersonId(personId)
+      setReviewMode('person')
+      setEnrollmentTab('review-poses')
+    } catch (error) {
+      console.error('Failed to load person poses:', error)
+      alert('Failed to load face samples. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStopEnrollment = async () => {
+    try {
+      setLoading(true)
+      const result = await apiService.stopEnrollment()
+      console.log('Enrollment stopped:', result)
+      
+      // Convert collected poses to numbered format
+      const numberedPoses = poseOrder.map((pose, index) => ({
+        id: index + 1,
+        number: index + 1,
+        pose: pose,
+        image: `/api/placeholder/120/120`, // This would be the actual captured image
+        quality: Math.random() * 0.5 + 0.5, // Mock quality for now
+        type: 'enrollment' // Mark as enrollment pose
+      }))
+      
+      setEnrollmentPoses(numberedPoses)
+      setReviewMode('enrollment')
+      setHasCompletedEnrollment(true)
+      setEnrollmentTab('review-poses')
+    } catch (error) {
+      console.error('Failed to stop enrollment:', error)
+      alert('Failed to stop enrollment. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeletePose = async (poseId, poseType) => {
+    if (!confirm('Are you sure you want to delete this pose?')) {
+      return
+    }
+    
+    try {
+      setLoading(true)
+      
+      if (reviewMode === 'person') {
+        // Delete from backend for saved person poses
+        await apiService.deletePose(reviewingPersonId, poseType)
+        // Reload person poses
+        await handleViewPersonPoses(reviewingPersonId)
+      } else {
+        // Remove from enrollment poses
+        setEnrollmentPoses(poses => poses.filter(p => p.id !== poseId))
+      }
+    } catch (error) {
+      console.error('Failed to delete pose:', error)
+      alert('Failed to delete pose. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddSingleImage = (personId) => {
+    // Create a file input element to select image
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async (e) => {
+      const file = e.target.files[0]
+      if (file) {
+        try {
+          setLoading(true)
+          console.log('Adding single image for person:', personId, 'File:', file.name)
+          
+          // Upload image to backend
+          const result = await apiService.uploadSingleImage(personId, file)
+          console.log('Upload result:', result)
+          
+          if (result.success) {
+            alert('Image uploaded successfully!')
+            // Refresh poses if we're currently viewing this person's poses
+            if (reviewingPersonId === personId && reviewMode === 'person') {
+              await handleViewPersonPoses(personId)
+            }
+          } else {
+            alert('Failed to upload image. Please try again.')
+          }
+        } catch (error) {
+          console.error('Failed to upload image:', error)
+          alert('Failed to upload image. Please try again.')
+        } finally {
+          setLoading(false)
+        }
+      }
+    }
+    input.click()
+  }
+
   // Person CRUD Functions
   const getFilteredPeople = () => {
     return people.filter(person => {
@@ -413,41 +501,67 @@ export default function FaceRecognitionSystem() {
     setShowPersonDialog(true)
   }
 
-  const handleSavePerson = () => {
-    if (editingPerson) {
-      // Update existing person
-      const updatedPeople = people.map(person => 
-        person.id === editingPerson.id 
-          ? { ...person, ...personForm }
-          : person
-      )
-      setPeople(updatedPeople)
-    } else {
-      // Add new person
-      const newPerson = {
-        id: Math.max(...people.map(p => p.id)) + 1,
-        ...personForm,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        enrollments: []
+  const handleSavePerson = async () => {
+    try {
+      setLoading(true)
+      if (editingPerson) {
+        // Update existing person
+        await apiService.updatePerson(editingPerson.id, personForm)
+        const response = await apiService.getPeople()
+        setPeople(Array.isArray(response) ? response : response.items || [])
+      } else {
+        // Add new person
+        await apiService.createPerson(personForm)
+        const response = await apiService.getPeople()
+        setPeople(Array.isArray(response) ? response : response.items || [])
       }
-      setPeople([newPerson, ...people])
+      setShowPersonDialog(false)
+    } catch (error) {
+      console.error('Failed to save person:', error)
+      alert('Failed to save person. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    setShowPersonDialog(false)
   }
 
-  const handleDeletePerson = (personId) => {
+  const handleDeletePerson = async (personId) => {
     if (confirm('Are you sure you want to delete this person? This will also delete all their enrollments.')) {
-      setPeople(people.filter(person => person.id !== personId))
+      try {
+        setLoading(true)
+        await apiService.deletePerson(personId)
+        const response = await apiService.getPeople()
+        setPeople(Array.isArray(response) ? response : response.items || [])
+      } catch (error) {
+        console.error('Failed to delete person:', error)
+        alert('Failed to delete person. Please try again.')
+      } finally {
+        setLoading(false)
+      }
     }
   }
 
-  const handleTogglePersonActive = (personId) => {
-    setPeople(people.map(person => 
-      person.id === personId 
-        ? { ...person, is_active: !person.is_active }
-        : person
-    ))
+  const handleTogglePersonActive = async (personId) => {
+    try {
+      console.log('Toggling status for person:', personId)
+      setLoading(true)
+      
+      const toggleResult = await apiService.togglePersonStatus(personId)
+      console.log('Toggle result:', toggleResult)
+      
+      const response = await apiService.getPeople()
+      console.log('Get people response:', response)
+      
+      const peopleArray = Array.isArray(response) ? response : response.items || []
+      console.log('Setting people to:', peopleArray)
+      setPeople(peopleArray)
+      
+    } catch (error) {
+      console.error('Failed to toggle person status:', error)
+      alert('Failed to update person status. Please try again.')
+      // Don't clear the people list on error, just keep the current state
+    } finally {
+      setLoading(false)
+    }
   }
 
 
@@ -542,128 +656,149 @@ export default function FaceRecognitionSystem() {
     ))
   }
 
-  const handleStartEnrollment = () => {
-    setIsEnrolling(true)
-    setEnrollmentStatus('Enrolling...')
-    // Simulate enrollment process
+  const handleStartEnrollment = async () => {
+    try {
+      setLoading(true)
+      setIsEnrolling(true)
+      setEnrollmentStatus('Starting enrollment...')
+      setHasCompletedEnrollment(false)
+      
+      // Prepare source configuration based on selected enrollment source
+      let sourceConfig = {}
+      let source = enrollmentSource
+      
+      if (enrollmentSource === 'video') {
+        if (!enrollmentVideoFilePath.trim()) {
+          alert('Please select a video file path first')
+          setIsEnrolling(false)
+          setEnrollmentStatus('Ready')
+          setLoading(false)
+          return
+        }
+        sourceConfig = {
+          video_path: enrollmentVideoFilePath.trim()
+        }
+        console.log('Starting enrollment with video file:', enrollmentVideoFilePath)
+      } else if (enrollmentSource === 'camera') {
+        if (!enrollmentRtspUrl.trim()) {
+          alert('Please enter an RTSP URL first')
+          setIsEnrolling(false)
+          setEnrollmentStatus('Ready')
+          setLoading(false)
+          return
+        }
+        sourceConfig = {
+          rtsp_url: enrollmentRtspUrl.trim()
+        }
+        console.log('Starting enrollment with RTSP camera:', enrollmentRtspUrl)
+      } else {
+        // Default to camera if no source specified
+        source = 'camera'
+        sourceConfig = {}
+        console.log('Starting enrollment with default camera')
+      }
+      
+      // Call backend API with source and configuration
+      const result = await apiService.startEnrollment(source, sourceConfig)
+      console.log('Enrollment started:', result)
+      setEnrollmentStatus(`Enrolling - Processing ${source === 'video' ? 'video' : 'camera feed'}`)
+    } catch (error) {
+      console.error('Failed to start enrollment:', error)
+      alert(`Failed to start enrollment: ${error.message || 'Please try again.'}`)
+      setIsEnrolling(false)
+      setEnrollmentStatus('Ready')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleClearEnrollmentDisplay = () => {
     setIsEnrolling(false)
     setEnrollmentStatus('Ready')
+    setHasCompletedEnrollment(false)
+    setEnrollmentPoses([])
+    setPersonPoses([])
+    setReviewMode('enrollment')
+    setReviewingPersonId(null)
   }
 
   // Person CRUD Functions
-  const handleAddPerson = () => {
-    setEditingPerson(null)
-    setPersonForm({
-      name: '',
-      personnelCode: '',
-      department: '',
-      position: '',
-      email: '',
-      phone: ''
-    })
-    setShowPersonDialog(true)
-  }
-
-  const handleEditPerson = (person) => {
-    setEditingPerson(person)
-    setPersonForm({
-      name: person.name,
-      personnelCode: person.personnelCode,
-      department: person.department,
-      position: person.position,
-      email: person.email,
-      phone: person.phone
-    })
-    setShowPersonDialog(true)
-  }
-
-  const handleSavePerson = () => {
-    if (editingPerson) {
-      // Update existing person
-      const updatedPeople = people.map(person => 
-        person.id === editingPerson.id 
-          ? { 
-              ...person, 
-              first_name: personForm.first_name,
-              last_name: personForm.last_name,
-              personnel_code: personForm.personnel_code,
-              department: personForm.department,
-              position: personForm.position,
-              email: personForm.email,
-              phone: personForm.phone
-            }
-          : person
-      )
-      setPeople(updatedPeople)
-    } else {
-      // Add new person
-      const newPerson = {
-        id: Math.max(...people.map(p => p.id)) + 1,
-        first_name: personForm.first_name,
-        last_name: personForm.last_name,
-        personnel_code: personForm.personnel_code,
-        department: personForm.department,
-        position: personForm.position,
-        email: personForm.email,
-        phone: personForm.phone,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        enrollments: []
-      }
-      setPeople([newPerson, ...people])
-    }
-    setShowPersonDialog(false)
-  }
-
-  const handleDeletePerson = (personId) => {
-    if (confirm('Are you sure you want to delete this person? This will also delete all their enrollments.')) {
-      setPeople(people.filter(person => person.id !== personId))
-    }
-  }
-
-  const handleTogglePersonActive = (personId) => {
-    setPeople(people.map(person => 
-      person.id === personId 
-        ? { ...person, is_active: !person.is_active }
-        : person
-    ))
-  }
 
   // Filter and search functions
-  const getFilteredPeople = () => {
-    return people.filter(person => {
-      const matchesSearch = searchTerm === '' || 
-        person.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        person.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        person.personnel_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        person.department.toLowerCase().includes(searchTerm.toLowerCase())
-      
-      const matchesStatus = filterStatus === 'all' || 
-        (filterStatus === 'active' && person.is_active) ||
-        (filterStatus === 'inactive' && !person.is_active)
-      
-      return matchesSearch && matchesStatus
-    })
-  }
 
   return (
     <div className="flex h-screen bg-background">
-      <Tabs value={mainTab} onValueChange={setMainTab} className="flex-1 flex flex-col h-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="recognition">Face Recognition</TabsTrigger>
-          <TabsTrigger value="enrollment">Face Enrollment</TabsTrigger>
-          <TabsTrigger value="gates">Gates & Cameras</TabsTrigger>
-          <TabsTrigger value="traffic">Traffic Reports</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="recognition" className="flex-1 flex m-0 p-0 data-[state=active]:flex h-full">
-          {/* Main Recognition Interface */}
-          <div className="flex h-full w-full min-h-0">
-            {/* Left Sidebar */}
-            <div className="w-80 bg-card border-r p-4 flex flex-col gap-4 flex-shrink-0">
+      {/* Vertical Sidebar Menu */}
+      <div className="w-64 bg-card border-r flex flex-col">
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold">Attendance System</h2>
+        </div>
+        <nav className="flex-1 p-4">
+          <div className="space-y-2">
+            <button
+              onClick={() => setMainTab('recognition')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                mainTab === 'recognition'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-accent hover:text-accent-foreground'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <User className="w-5 h-5" />
+                <span>Face Recognition</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setMainTab('enrollment')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                mainTab === 'enrollment'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-accent hover:text-accent-foreground'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <UserPlus className="w-5 h-5" />
+                <span>Face Enrollment</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setMainTab('gates')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                mainTab === 'gates'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-accent hover:text-accent-foreground'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Camera className="w-5 h-5" />
+                <span>Gates & Cameras</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setMainTab('traffic')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                mainTab === 'traffic'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-accent hover:text-accent-foreground'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <BarChart3 className="w-5 h-5" />
+                <span>Traffic Reports</span>
+              </div>
+            </button>
+          </div>
+        </nav>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full">
+        {mainTab === 'recognition' && (
+          <div className="flex-1 flex h-full">
+            {/* Main Recognition Interface */}
+            <div className="flex h-full w-full min-h-0">
+              {/* Left Sidebar */}
+              <div className="w-80 bg-card border-r p-4 flex flex-col gap-4 flex-shrink-0">
               {/* Recognition Source Button */}
               <Button onClick={() => setShowSourceDialog(true)} className="w-full" variant="outline">
                 Recognition Source
@@ -759,88 +894,335 @@ export default function FaceRecognitionSystem() {
               </div>
             </div>
           </div>
-        </TabsContent>
+          </div>
+        )}
         
-        <TabsContent value="enrollment" className="flex-1 flex m-0 p-0 data-[state=active]:flex h-full">
-          {/* Face Enrollment Interface */}
-          <div className="flex h-full w-full min-h-0">
-            {/* Left Panel - Controls */}
-            <div className="w-80 bg-card border-r p-4 flex flex-col gap-4 flex-shrink-0">
-              {/* Enrollment Source Button */}
-              <Button onClick={() => setShowEnrollmentSourceDialog(true)} className="w-full" variant="outline">
-                Enrollment Source
-              </Button>
-
-              {/* Enrollment Controls */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Enrollment Controls</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Button 
-                    onClick={handleStartEnrollment} 
-                    className="w-full" 
-                    disabled={isEnrolling}
-                  >
-                    Start Enrollment
-                  </Button>
-                  <Button 
-                    onClick={handleClearEnrollmentDisplay} 
-                    variant="outline" 
-                    className="w-full"
-                  >
-                    Clear Display
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Status */}
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-center">
-                    <span className="text-sm font-medium">{enrollmentStatus}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Right Panel - People List */}
-            <div className="flex-1 flex flex-col min-w-0">
-              {/* Header */}
-              <div className="p-4 border-b">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold">Enrolled People</h2>
-                  <Button onClick={handleAddPerson}>
-                    Add Person
-                  </Button>
-                </div>
-                
-                {/* Search and Filter */}
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Search by name, code, department..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+        {mainTab === 'enrollment' && (
+          <div className="flex-1 flex flex-col h-full">
+            {/* Enrollment Tabs */}
+            <Tabs value={enrollmentTab} onValueChange={setEnrollmentTab} className="flex-1 flex flex-col h-full">
+              <div className="border-b px-6 pt-4">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="live-enrollment" className="flex items-center gap-2">
+                    <UserPlus className="w-4 h-4" />
+                    <span>Live Enrollment</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="review-poses" className="flex items-center gap-2">
+                    <Eye className="w-4 h-4" />
+                    <span>Review Poses</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="people-management" className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    <span>People Management</span>
+                  </TabsTrigger>
+                </TabsList>
               </div>
 
-              {/* People List */}
-              <div className="flex-1 p-4">
-                <ScrollArea className="h-full">
-                  <div className="space-y-3">
-                    {getFilteredPeople().map((person) => (
+              <TabsContent value="live-enrollment" className="flex-1 flex m-0 p-0">
+                {/* Live Enrollment Interface */}
+                <div className="flex h-full w-full min-h-0">
+                  {/* Left Panel - Controls */}
+                  <div className="w-80 bg-card border-r p-4 flex flex-col gap-4 flex-shrink-0">
+                    {/* Enrollment Source Button */}
+                    <Button onClick={() => setShowEnrollmentSourceDialog(true)} className="w-full" variant="outline">
+                      Enrollment Source
+                    </Button>
+
+                    {/* Enrollment Controls */}
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm">Enrollment Controls</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {!isEnrolling ? (
+                          <Button 
+                            onClick={handleStartEnrollment} 
+                            className="w-full"
+                          >
+                            Start Enrollment
+                          </Button>
+                        ) : (
+                          <Button 
+                            onClick={handleStopEnrollment} 
+                            variant="destructive"
+                            className="w-full"
+                          >
+                            Stop Enrollment
+                          </Button>
+                        )}
+                        <Button 
+                          onClick={handleClearEnrollmentDisplay} 
+                          variant="outline" 
+                          className="w-full"
+                        >
+                          Clear Display
+                        </Button>
+                      </CardContent>
+                    </Card>
+
+                    {/* Status */}
+                    <Card>
+                      <CardContent className="pt-6">
+                        <div className="text-center">
+                          <span className="text-sm font-medium">{enrollmentStatus}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Right Panel - Camera Feed */}
+                  <div className="flex-1 bg-black flex items-center justify-center">
+                    <div className="text-white text-center">
+                      <div className="text-lg mb-2">Live Enrollment Feed</div>
+                      <div className="text-sm text-gray-400">Camera feed will appear here</div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="review-poses" className="flex-1 flex m-0 p-0">
+                {/* Review Poses Interface */}
+                <div className="flex-1 p-6">
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-bold">
+                      {reviewMode === 'person' ? 'Face Samples' : 'Review Collected Poses'}
+                    </h2>
+                    <p className="text-muted-foreground">
+                      {reviewMode === 'person' && reviewingPersonId ? 
+                        `Viewing face samples for: ${people.find(p => p.id === reviewingPersonId)?.first_name} ${people.find(p => p.id === reviewingPersonId)?.last_name}` : 
+                        reviewMode === 'enrollment' ? 
+                        'Review and confirm enrollment poses' :
+                        'Select a person to view their face samples'
+                      }
+                    </p>
+                    {reviewingPersonId && (
+                      <div className="flex gap-2 mt-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => {
+                            setReviewingPersonId(null)
+                            setPersonPoses([])
+                            setReviewMode('enrollment')
+                          }}
+                        >
+                          Back to Enrollment
+                        </Button>
+                        {reviewMode === 'person' && (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleAddSingleImage(reviewingPersonId)}
+                            className="flex items-center gap-1"
+                          >
+                            <ImagePlus className="w-4 h-4" />
+                            Add Sample
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-center">
+                        {reviewMode === 'person' ? 'Face Samples' : 'Collected Poses'}
+                      </CardTitle>
+                      {reviewMode === 'person' && (
+                        <p className="text-center text-sm text-muted-foreground">
+                          Total: {personPoses.length} samples
+                        </p>
+                      )}
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      {/* Poses Grid - Numbered Layout */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 mb-8 justify-items-center">
+                        {(reviewMode === 'person' ? personPoses : enrollmentPoses).map((pose) => (
+                          <div key={pose.id} className="flex flex-col items-center relative group">
+                            {/* Pose Number Badge */}
+                            <div className="absolute top-2 left-2 z-10 bg-primary text-primary-foreground text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                              {pose.number}
+                            </div>
+                            
+                            {/* Delete Button */}
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 p-0"
+                              onClick={() => handleDeletePose(pose.id, pose.pose)}
+                            >
+                              ×
+                            </Button>
+                            
+                            {/* Pose Image */}
+                            <Card className={`w-32 h-40 overflow-hidden border-2 transition-colors ${
+                              pose.type === 'enrollment' ? 'border-green-500 hover:border-green-600' : 
+                              'border-blue-500 hover:border-blue-600'
+                            }`}>
+                              <div className="w-full h-full bg-muted flex items-center justify-center">
+                                <img 
+                                  src={pose.image || '/api/placeholder/128/160'} 
+                                  alt={`${pose.pose} pose #${pose.number}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            </Card>
+                            
+                            {/* Pose Info */}
+                            <div className="text-center mt-2">
+                              <div className="font-medium text-sm">{pose.pose}</div>
+                              {pose.quality !== undefined && (
+                                <div className={`text-xs ${pose.type === 'enrollment' ? 'text-green-600' : 'text-blue-600'}`}>
+                                  Quality: {pose.quality.toFixed(3)}
+                                </div>
+                              )}
+                              {pose.created_at && (
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(pose.created_at).toLocaleDateString()}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        
+                        {/* Empty State */}
+                        {(reviewMode === 'person' ? personPoses : enrollmentPoses).length === 0 && (
+                          <div className="col-span-full text-center py-8 text-muted-foreground">
+                            {reviewMode === 'person' ? 
+                              'No face samples found for this person' :
+                              'No poses collected yet'
+                            }
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Enrollment Confirmation - Show only in enrollment mode */}
+                      {reviewMode === 'enrollment' && hasCompletedEnrollment && (
+                        <Card className="bg-muted/50">
+                          <CardHeader>
+                            <CardTitle className="text-center text-lg">Confirm Enrollment</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              <div>
+                                <Label htmlFor="person-select">Enter Person's Name:</Label>
+                                <Select value={selectedPersonId} onValueChange={setSelectedPersonId}>
+                                  <SelectTrigger className="mt-1">
+                                    <SelectValue placeholder="Select or search for a person..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {getFilteredPeople().map((person) => (
+                                      <SelectItem key={person.id} value={person.id.toString()}>
+                                        {`${person.first_name} ${person.last_name}`} - {person.personnel_code}
+                                      </SelectItem>
+                                    ))}
+                                    <SelectItem value="new-person">
+                                      <div className="flex items-center gap-2">
+                                        <UserPlus className="w-4 h-4" />
+                                        <span>Add New Person</span>
+                                      </div>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex gap-4 justify-center">
+                                <Button 
+                                  onClick={() => {
+                                    if (selectedPersonId) {
+                                      if (selectedPersonId === 'new-person') {
+                                        // Handle new person enrollment
+                                        console.log('Opening new person form...')
+                                      } else {
+                                        // Handle existing person enrollment
+                                        const selectedPerson = people.find(p => p.id.toString() === selectedPersonId)
+                                        console.log('Confirming enrollment for:', selectedPerson)
+                                      }
+                                      // Clear states after confirmation
+                                      setSelectedPersonId('')
+                                      setHasCompletedEnrollment(false)
+                                      setEnrollmentStatus('Ready')
+                                    }
+                                  }}
+                                  disabled={!selectedPersonId}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  Confirm and Save
+                                </Button>
+                                <Button 
+                                  onClick={() => {
+                                    // Handle discard
+                                    setSelectedPersonId('')
+                                    setHasCompletedEnrollment(false)
+                                    setEnrollmentStatus('Ready')
+                                  }}
+                                  variant="destructive"
+                                >
+                                  Discard
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="people-management" className="flex-1 flex m-0 p-0">
+                {/* People Management Interface (Current People List) */}
+                <div className="flex-1 flex flex-col min-w-0">
+                  {/* Header */}
+                  <div className="p-4 border-b">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold">People Management</h2>
+                      <Button onClick={handleAddPerson}>
+                        Add Person
+                      </Button>
+                    </div>
+                    
+                    {/* Search and Filter */}
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Search by name, code, department..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Select value={filterStatus} onValueChange={setFilterStatus}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* People List */}
+                  <div className="flex-1 p-4">
+                    <ScrollArea className="h-full">
+                      <div className="space-y-3">
+                        {loading ? (
+                          <div className="flex items-center justify-center py-8">
+                            <div className="text-center">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                              <p className="text-muted-foreground">Loading people...</p>
+                            </div>
+                          </div>
+                        ) : people.length === 0 ? (
+                          <div className="flex items-center justify-center py-8">
+                            <div className="text-center">
+                              <Users className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                              <p className="text-muted-foreground">No people found</p>
+                              <p className="text-sm text-muted-foreground">Add some people to get started</p>
+                            </div>
+                          </div>
+                        ) : (
+                          getFilteredPeople().map((person) => (
                       <Card key={person.id} className="p-4">
                         <div className="flex items-start space-x-4">
                           <Avatar className="w-16 h-16">
@@ -895,7 +1277,25 @@ export default function FaceRecognitionSystem() {
                               </div>
                             </div>
                             
-                            <div className="flex gap-2 mt-3">
+                            <div className="flex flex-wrap gap-2 mt-3">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleViewPersonPoses(person.id)}
+                                className="flex items-center gap-1"
+                              >
+                                <Images className="w-3 h-3" />
+                                View Poses
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleAddSingleImage(person.id)}
+                                className="flex items-center gap-1"
+                              >
+                                <ImagePlus className="w-3 h-3" />
+                                Add Image
+                              </Button>
                               <Button 
                                 size="sm" 
                                 variant="outline"
@@ -921,18 +1321,22 @@ export default function FaceRecognitionSystem() {
                           </div>
                         </div>
                       </Card>
-                    ))}
+                        ))
+                        )}
+                      </div>
+                    </ScrollArea>
                   </div>
-                </ScrollArea>
-              </div>
-            </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
-        </TabsContent>
+        )}
         
-        <TabsContent value="gates" className="flex-1 flex m-0 p-0 data-[state=active]:flex h-full">
-          {/* Gates & Cameras Management */}
-          <div className="flex h-full w-full min-h-0">
-            <div className="flex-1 p-6">
+        {mainTab === 'gates' && (
+          <div className="flex-1 flex h-full">
+            {/* Gates & Cameras Management */}
+            <div className="flex h-full w-full min-h-0">
+              <div className="flex-1 p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h1 className="text-2xl font-bold">Gates & Cameras Management</h1>
@@ -1046,18 +1450,20 @@ export default function FaceRecognitionSystem() {
               </div>
             </div>
           </div>
-        </TabsContent>
+          </div>
+        )}
         
-        <TabsContent value="traffic" className="flex-1 flex m-0 p-0 data-[state=active]:flex h-full">
-          {/* Traffic Reports */}
-          <div className="flex h-full w-full min-h-0">
-            {/* Left Sidebar - Filters */}
-            <div className="w-80 bg-card border-r p-4 flex flex-col gap-4 flex-shrink-0">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Traffic Filters</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+        {mainTab === 'traffic' && (
+          <div className="flex-1 flex h-full">
+            {/* Traffic Reports */}
+            <div className="flex h-full w-full min-h-0">
+              {/* Left Sidebar - Filters */}
+              <div className="w-80 bg-card border-r p-4 flex flex-col gap-4 flex-shrink-0">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Traffic Filters</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                   <div>
                     <Label htmlFor="gate-filter">Gate</Label>
                     <Select value={trafficFilters.gate} onValueChange={(value) => setTrafficFilters({...trafficFilters, gate: value})}>
@@ -1281,8 +1687,9 @@ export default function FaceRecognitionSystem() {
               </Card>
             </div>
           </div>
-        </TabsContent>
-      </Tabs>
+          </div>
+        )}
+      </div>
 
       {/* Recognition Settings Dialog */}
       <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
@@ -1490,6 +1897,35 @@ export default function FaceRecognitionSystem() {
               {enrollmentSource === 'camera' && enrollmentRtspUrl && (
                 <div className="text-xs mt-1 font-mono">{enrollmentRtspUrl}</div>
               )}
+            </div>
+            
+            {/* Dialog Actions */}
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowEnrollmentSourceDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  // Validate the form based on selected source
+                  if (enrollmentSource === 'video' && !enrollmentVideoFilePath.trim()) {
+                    alert('Please enter a video file path')
+                    return
+                  }
+                  if (enrollmentSource === 'camera' && !enrollmentRtspUrl.trim()) {
+                    alert('Please enter an RTSP URL')
+                    return
+                  }
+                  
+                  // Close dialog and apply settings
+                  setShowEnrollmentSourceDialog(false)
+                  alert(`Enrollment source set to: ${enrollmentSource === 'video' ? 'Video File' : 'IP Camera'}`)
+                }}
+              >
+                OK
+              </Button>
             </div>
           </div>
         </DialogContent>

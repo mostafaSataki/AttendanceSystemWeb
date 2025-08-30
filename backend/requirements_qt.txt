@@ -1,0 +1,13 @@
+# Qt GUI Requirements for Face Recognition System
+
+# Core PySide6 for GUI (Official Qt for Python)
+PySide6>=6.5.0
+
+# Image processing (OpenCV for backend only, no display)
+opencv-python>=4.8.0
+
+# Scientific computing
+numpy>=1.21.0
+
+# Optional: For development tools
+# pyside6-tools>=6.5.0  # For Qt Designer and other tools

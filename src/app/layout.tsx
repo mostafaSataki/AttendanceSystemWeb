@@ -14,21 +14,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  title: "Face Recognition - Attendance System",
+  description: "Modern face recognition attendance system built with Next.js, FastAPI, and advanced computer vision. Track attendance automatically.",
+  keywords: ["Face Recognition", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "Attendance System", "React", "Computer Vision"],
+  authors: [{ name: "Face Recognition Team" }],
   openGraph: {
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
+    title: "Face Recognition",
+    description: "Automated attendance tracking with face recognition",
+    url: "https://localhost:3000",
+    siteName: "Face Recognition",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
+    title: "Face Recognition",
+    description: "Automated attendance tracking with face recognition",
   },
 };
 
