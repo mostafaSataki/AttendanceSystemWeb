@@ -15,7 +15,7 @@ from pathlib import Path
 # Add the app directory to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.api.endpoints import enrollment, recognition, people, poses
+from app.api.endpoints import enrollment, recognition, people, poses, streaming
 from app.core.config import settings
 from app.services.face_recognition_service import FaceRecognitionService
 
@@ -64,6 +64,7 @@ app.include_router(enrollment.router, prefix="/api/enrollment", tags=["enrollmen
 app.include_router(recognition.router, prefix="/api/recognition", tags=["recognition"])
 app.include_router(people.router, prefix="/api/people", tags=["people"])
 app.include_router(poses.router, prefix="/api/poses", tags=["poses"])
+app.include_router(streaming.router, prefix="/api/stream", tags=["streaming"])
 
 
 @app.get("/")

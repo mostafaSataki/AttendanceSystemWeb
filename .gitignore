@@ -59,3 +59,4 @@ backend/app/models/__pycache__/enrollment.cpython-312.pyc
 /backend/app/services/__pycache__
 *.pyc
 /backend/models
+backend/models.rar

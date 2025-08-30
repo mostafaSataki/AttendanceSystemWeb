@@ -387,9 +387,11 @@ export default function FaceRecognitionSystem() {
       setReviewMode('enrollment')
       setHasCompletedEnrollment(true)
       setEnrollmentTab('review-poses')
+      setIsEnrolling(false) // Stop the video stream
     } catch (error) {
       console.error('Failed to stop enrollment:', error)
       alert('Failed to stop enrollment. Please try again.')
+      setIsEnrolling(false) // Stop the video stream even on error
     } finally {
       setLoading(false)
     }
@@ -972,10 +974,19 @@ export default function FaceRecognitionSystem() {
 
                   {/* Right Panel - Camera Feed */}
                   <div className="flex-1 bg-black flex items-center justify-center">
-                    <div className="text-white text-center">
-                      <div className="text-lg mb-2">Live Enrollment Feed</div>
-                      <div className="text-sm text-gray-400">Camera feed will appear here</div>
-                    </div>
+                    {isEnrolling ? (
+                      <img 
+                        src="http://localhost:8000/api/enrollment/video-stream" 
+                        alt="Live Enrollment Feed"
+                        className="max-w-full max-h-full object-contain"
+                        style={{ width: 'auto', height: 'auto' }}
+                      />
+                    ) : (
+                      <div className="text-white text-center">
+                        <div className="text-lg mb-2">Live Enrollment Feed</div>
+                        <div className="text-sm text-gray-400">Click Start Enrollment to begin</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </TabsContent>
@@ -1921,7 +1932,6 @@ export default function FaceRecognitionSystem() {
                   
                   // Close dialog and apply settings
                   setShowEnrollmentSourceDialog(false)
-                  alert(`Enrollment source set to: ${enrollmentSource === 'video' ? 'Video File' : 'IP Camera'}`)
                 }}
               >
                 OK

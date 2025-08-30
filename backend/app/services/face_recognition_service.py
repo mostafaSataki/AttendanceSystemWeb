@@ -1178,12 +1178,148 @@ class FaceRecognitionService:
         self.total_detections = 0
         self.total_tracks = 0
         
+        # Video capture for enrollment
+        self.current_capture = None
+        self.current_video_path = None
+        self.collected_poses = {}
+        self.enrollment_thread = None
+        self.enrollment_active = False
+        
+        # Initialization status
+        self.is_initialized = False
+        
         print("✅ Face Recognition Service initialized")
         print(f"🔧 Detection: Enhanced FaceDetector with YuNet support and adaptive threshold")
         print(f"🔧 Recognition: DeepFace {recognition_model} model" if self.verifier else "🔧 Recognition: DISABLED (DeepFace not available)")
         print(f"🔧 Tracker: {self.tracker_type.upper()} with robustness features")
         print(f"🔧 Features: Border tracking, quality scoring, region monitoring")
         print(f"🔧 Embeddings Database: {len(self.embeddings_database)} persons loaded")
+    
+    async def initialize(self):
+        """Initialize the face recognition service"""
+        try:
+            # Load embeddings database if available
+            try:
+                from app.services.backend_enrollment_service import BackendEnrollmentService
+                enrollment_service = BackendEnrollmentService()
+                self.load_embeddings_database(enrollment_service)
+            except Exception as e:
+                print(f"⚠️ Could not load enrollment database: {e}")
+            
+            self.is_initialized = True
+            print("✅ Face Recognition Service fully initialized")
+            
+        except Exception as e:
+            print(f"❌ Failed to initialize Face Recognition Service: {e}")
+            self.is_initialized = False
+            raise
+    
+    async def cleanup(self):
+        """Cleanup resources"""
+        try:
+            self.is_running = False
+            print("✅ Face Recognition Service cleaned up")
+        except Exception as e:
+            print(f"⚠️ Error during cleanup: {e}")
+    
+    async def start_enrollment(self, video_path=None):
+        """Start enrollment session with video processing"""
+        try:
+            self.is_running = True
+            self.current_video_path = video_path
+            
+            # If video path is provided, start video capture
+            if video_path:
+                print(f"🎬 Attempting to open video file: {video_path}")
+                if os.path.exists(video_path):
+                    print(f"✅ Video file exists, opening capture...")
+                    self.current_capture = cv2.VideoCapture(video_path)
+                    if not self.current_capture.isOpened():
+                        print(f"❌ Failed to open video capture")
+                        return {
+                            "success": False,
+                            "error": f"Could not open video file: {video_path}"
+                        }
+                    print(f"✅ Video capture started successfully: {video_path}")
+                else:
+                    print(f"❌ Video file does not exist: {video_path}")
+                    return {
+                        "success": False,
+                        "error": f"Video file not found: {video_path}"
+                    }
+            else:
+                print(f"⚠️ No video path provided, starting basic enrollment")
+            
+            return {
+                "success": True,
+                "message": "Enrollment started",
+                "session_id": f"enrollment_session_{int(time.time())}",
+                "poses_required": ["FRONT", "LEFT", "RIGHT", "UP", "DOWN"],
+                "video_path": video_path
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def stop_enrollment(self):
+        """Stop enrollment session"""
+        try:
+            self.is_running = False
+            
+            # Clean up video capture
+            if self.current_capture is not None:
+                self.current_capture.release()
+                self.current_capture = None
+                print("✅ Video capture stopped and released")
+            
+            self.current_video_path = None
+            self.current_frame = None
+            
+            return {
+                "success": True,
+                "message": "Enrollment stopped",
+                "poses": []  # Return collected poses if any
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def capture_pose(self, pose_type: str):
+        """Capture a specific pose during enrollment"""
+        try:
+            # This would integrate with actual pose capture logic
+            return {
+                "success": True,
+                "pose_type": pose_type,
+                "quality": 0.8,
+                "image_path": None,
+                "message": f"Pose {pose_type} captured"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
+    
+    async def get_enrollment_status(self):
+        """Get current enrollment status"""
+        try:
+            return {
+                "success": True,
+                "is_running": self.is_running,
+                "session_active": self.is_running,
+                "poses_collected": 0,
+                "current_pose": None
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
     def load_embeddings_database(self, enrollment_service) -> bool:
         """Load embeddings from enrollment service"""

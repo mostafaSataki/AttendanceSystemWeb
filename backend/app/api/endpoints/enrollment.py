@@ -3,7 +3,7 @@ Face Enrollment API endpoints
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Depends, status, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from typing import List, Optional, Dict, Any
 import io
 import base64
@@ -44,8 +44,10 @@ async def start_enrollment(request: Request):
             body = await request.json()
             source = body.get("source", "camera")
             source_config = body.get("source_config", {})
-        except Exception:
+            print(f"📥 Received enrollment request - Source: {source}, Config: {source_config}")
+        except Exception as e:
             # No body or invalid JSON, use defaults
+            print(f"⚠️ Failed to parse JSON body: {e}")
             pass
         
         print(f"Starting enrollment with source: {source}, config: {source_config}")
@@ -53,7 +55,7 @@ async def start_enrollment(request: Request):
         # Generate session ID
         session_id = f"enrollment_{source}_{int(time.time())}"
         
-        # Initialize video source based on type
+        # Start enrollment using face service
         if source == "video" and source_config.get("video_path"):
             video_path = source_config['video_path']
             print(f"📹 Video path: {video_path}")
@@ -61,20 +63,22 @@ async def start_enrollment(request: Request):
             # Validate video file exists
             if not os.path.exists(video_path):
                 raise HTTPException(status_code=400, detail=f"Video file not found: {video_path}")
-                
-            # Initialize video capture
-            result = enrollment_service.start_video_enrollment(session_id, video_path)
+            
+            # Start enrollment with video processing
+            result = await face_service.start_enrollment(video_path=video_path)
             
         elif source == "camera":
             camera_index = source_config.get("camera_index", 0)
             rtsp_url = source_config.get("rtsp_url")
             print(f"📷 Camera source - Index: {camera_index}, RTSP: {rtsp_url}")
             
-            # Initialize camera capture
-            result = enrollment_service.start_camera_enrollment(session_id, camera_index, rtsp_url)
+            # Start enrollment with camera source
+            result = await face_service.start_enrollment()
+            result["camera_config"] = {"index": camera_index, "rtsp_url": rtsp_url}
             
         else:
-            raise HTTPException(status_code=400, detail="Invalid source or missing source configuration")
+            # Default enrollment start
+            result = await face_service.start_enrollment()
         
         if not result.get("success", False):
             raise HTTPException(status_code=500, detail=result.get("error", "Failed to start enrollment"))
@@ -224,3 +228,33 @@ async def get_enrollment_status(request: Request):
         return status_info
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get status: {str(e)}")
+
+@router.get("/video-stream")
+async def video_stream(request: Request):
+    """Stream current enrollment video"""
+    try:
+        face_service = request.app.state.face_service
+        
+        def generate_frames():
+            while face_service.is_running and face_service.current_capture is not None:
+                ret, frame = face_service.current_capture.read()
+                if not ret:
+                    break
+                
+                # Process frame for face detection/enrollment
+                face_service.current_frame = frame
+                
+                # Encode frame to JPEG
+                _, buffer = cv2.imencode('.jpg', frame)
+                frame_bytes = buffer.tobytes()
+                
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        
+        if not face_service.is_running or face_service.current_capture is None:
+            raise HTTPException(status_code=404, detail="No active enrollment session")
+        
+        return StreamingResponse(generate_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stream video: {str(e)}")
