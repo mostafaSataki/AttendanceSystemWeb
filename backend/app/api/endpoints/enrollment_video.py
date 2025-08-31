@@ -1,6 +1,6 @@
 """
 Video-enabled Face Enrollment API endpoints
-Simple implementation that shows real video but returns mock face data
+Real implementation using BackendEnrollmentService
 """
 
 from fastapi import APIRouter, HTTPException, Request
@@ -9,10 +9,16 @@ import cv2
 import base64
 import time
 import asyncio
+import os
 from typing import Dict, Any
 import threading
 
+from app.services.backend_enrollment_service import BackendEnrollmentService
+
 router = APIRouter()
+
+# Initialize real enrollment service
+enrollment_service = BackendEnrollmentService()
 
 # Global variables to manage camera state
 current_camera = None
@@ -21,105 +27,99 @@ enrollment_active = False
 
 @router.post("/multi-pose")
 async def start_multi_pose_enrollment(request: Request):
-    """Start multi-pose face enrollment with real video stream"""
+    """Start multi-pose face enrollment using real BackendEnrollmentService"""
     try:
         body = await request.json()
         source = body.get("source", "camera")
         source_config = body.get("source_config", {})
         person_name = body.get("person_name", "temp_enrollment")
         
-        print(f"Starting video enrollment - Source: {source}, Person: {person_name}")
+        print(f"📥 Starting real multi-pose enrollment - Source: {source}, Person: {person_name}")
+        print(f"📁 Source config: {source_config}")
         
-        global current_camera, enrollment_active
+        if source == "video":
+            video_path = source_config.get("video_path")
+            if not video_path or not os.path.exists(video_path):
+                print(f"❌ Video file not found: {video_path}")
+                raise HTTPException(status_code=400, detail="Valid video file path required")
+            
+            print(f"🎬 Processing video file: {video_path}")
+            # Process video for multi-pose enrollment
+            result = enrollment_service.enroll_from_video_backend(
+                video_path=video_path,
+                person_name=person_name,
+                auto_save=False  # Don't auto-save, return poses for review
+            )
+            
+        elif source == "camera":
+            camera_source = source_config.get("camera_index", 0)
+            if "rtsp_url" in source_config:
+                camera_source = source_config["rtsp_url"]
+            
+            print(f"📹 Processing camera stream: {camera_source}")
+            # Process camera stream for multi-pose enrollment
+            result = enrollment_service.enroll_from_camera_stream(
+                camera_source=camera_source,
+                person_name=person_name,
+                auto_save=False,  # Don't auto-save, return poses for review
+                max_enrollment_time=60.0  # 1 minute timeout
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Source must be 'video' or 'camera'")
         
-        # Initialize camera or video file
-        with camera_lock:
-            if current_camera is None:
-                if source == "video":
-                    # Handle video file
-                    video_path = source_config.get("video_path")
-                    if video_path:
-                        print(f"Opening video file: {video_path}")
-                        import os
-                        if os.path.exists(video_path):
-                            current_camera = cv2.VideoCapture(video_path)
-                            print(f"Video file exists. Opened successfully: {current_camera.isOpened()}")
-                        else:
-                            print(f"ERROR: Video file does not exist: {video_path}")
-                            current_camera = None
-                    else:
-                        print("ERROR: No video_path provided for video source")
-                        current_camera = None
-                else:
-                    # Handle camera
-                    camera_index = source_config.get("camera_index", 0)
-                    print(f"Opening camera with index: {camera_index}")
-                    current_camera = cv2.VideoCapture(camera_index)
-                    print(f"Camera opened successfully: {current_camera.isOpened()}")
-                
-                if current_camera is None or not current_camera.isOpened():
-                    print(f"WARNING: Could not open {'video file' if source == 'video' else 'camera'}, using mock video mode")
-                    current_camera = None
-                    # Continue without camera - will return mock data but indicate no video stream
-                
-                # Set camera properties if camera is available
-                if current_camera is not None:
-                    current_camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    current_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    current_camera.set(cv2.CAP_PROP_FPS, 30)
+        print(f"🔄 Enrollment result: {result.get('success')}, poses: {len(result.get('collected_poses_data', {}))}")
         
-        enrollment_active = True
+        if not result.get("success"):
+            error_msg = result.get("error", "Enrollment failed")
+            print(f"❌ Enrollment failed: {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
         
-        # Simulate collecting poses over time (mock data but with real video running)
-        await asyncio.sleep(2)  # Simulate processing time
-        
-        # Create mock face images for different poses
+        # Convert collected poses to base64 images for frontend
+        collected_poses = result.get("collected_poses_data", {})
         pose_images = []
-        poses = ["FRONT", "LEFT", "RIGHT"]
         
-        for i, pose_name in enumerate(poses):
-            # Create a simple colored rectangle as mock face image
-            import numpy as np
-            mock_image = np.zeros((112, 112, 3), dtype=np.uint8)
-            # Different color for each pose
-            if pose_name == "FRONT":
-                mock_image[:, :] = [100, 150, 200]  # Blue-ish
-            elif pose_name == "LEFT":
-                mock_image[:, :] = [150, 100, 200]  # Purple-ish  
-            else:  # RIGHT
-                mock_image[:, :] = [200, 150, 100]  # Orange-ish
-            
-            # Add text to indicate the pose
-            cv2.putText(mock_image, pose_name, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            
-            # Convert to base64
-            _, buffer = cv2.imencode('.jpg', mock_image)
-            image_base64 = base64.b64encode(buffer).decode('utf-8')
-            
-            pose_images.append({
-                "pose_name": pose_name,
-                "image": f"data:image/jpeg;base64,{image_base64}",
-                "quality_score": 0.85 - (i * 0.05),  # Decreasing quality
-                "timestamp": time.time()
-            })
+        print(f"📸 Converting {len(collected_poses)} poses to base64...")
         
-        return {
+        for pose_name, pose_data in collected_poses.items():
+            if "aligned_face" in pose_data:
+                # Convert aligned face image to base64
+                _, buffer = cv2.imencode('.jpg', pose_data["aligned_face"])
+                image_base64 = base64.b64encode(buffer).decode('utf-8')
+                
+                # Handle both PoseState enum and string keys
+                pose_key = pose_name.value if hasattr(pose_name, 'value') else str(pose_name)
+                
+                pose_images.append({
+                    "pose_name": pose_key,
+                    "image": f"data:image/jpeg;base64,{image_base64}",
+                    "quality_score": pose_data.get("quality_score", 0.0),
+                    "timestamp": pose_data.get("timestamp"),
+                    "frame_number": pose_data.get("frame_number")
+                })
+                print(f"✅ Converted pose: {pose_key} (quality: {pose_data.get('quality_score', 0.0):.3f})")
+        
+        response_data = {
             "status": "success",
             "message": f"Collected {len(pose_images)} poses for {person_name}",
             "person_name": person_name,
             "total_poses": len(pose_images),
             "pose_images": pose_images,
-            "has_video_stream": current_camera is not None,  # Indicate that video stream is available
-            "stream_url": "/api/enrollment/video-stream" if current_camera is not None else None,  # URL for video stream
             "processing_stats": {
-                "frames_processed": 150,
-                "processing_time": 3.2,
+                "frames_processed": result.get("total_frames_processed", 0),
+                "processing_time": result.get("processing_time", 0),
                 "poses_collected": [p["pose_name"] for p in pose_images]
             }
         }
         
+        print(f"✅ Returning {len(pose_images)} poses to frontend")
+        return response_data
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error in video enrollment: {e}")
+        print(f"❌ Error in real enrollment: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Video enrollment failed: {str(e)}")
 
 

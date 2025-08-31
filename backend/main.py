@@ -15,8 +15,7 @@ from pathlib import Path
 # Add the app directory to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.api.endpoints import enrollment_video as enrollment, recognition, people, poses
-# from app.api.endpoints import streaming  # Temporarily disabled due to jwt dependency
+from app.api.endpoints import enrollment_video as enrollment, recognition, people, poses, enrollment_stream, video_preview
 from app.core.config import settings
 from app.services.face_recognition_service import FaceRecognitionService
 
@@ -55,10 +54,11 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(enrollment.router, prefix="/api/enrollment", tags=["enrollment"])
+app.include_router(enrollment_stream.router, prefix="/api/enrollment-stream", tags=["enrollment-stream"])
+app.include_router(video_preview.router, prefix="/api/video", tags=["video-preview"])
 app.include_router(recognition.router, prefix="/api/recognition", tags=["recognition"])
 app.include_router(people.router, prefix="/api/people", tags=["people"])
 app.include_router(poses.router, prefix="/api/poses", tags=["poses"])
-# app.include_router(streaming.router, prefix="/api/stream", tags=["streaming"])  # Temporarily disabled
 
 
 @app.get("/")

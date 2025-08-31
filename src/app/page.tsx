@@ -176,7 +176,10 @@ export default function FaceRecognitionSystem() {
     phone: ''
   })
   const [isEnrolling, setIsEnrolling] = useState(false)
-  
+  const [streamSessionId, setStreamSessionId] = useState('')
+  const [streamUrl, setStreamUrl] = useState('')
+  const [processingStartTime, setProcessingStartTime] = useState<number>(0)
+
   // Fetch people from API on component mount
   useEffect(() => {
     const fetchPeople = async () => {
@@ -370,21 +373,17 @@ export default function FaceRecognitionSystem() {
   const handleStopEnrollment = async () => {
     try {
       setLoading(true)
-      const result = await apiService.stopEnrollment()
-      console.log('Enrollment stopped:', result)
+      setEnrollmentStatus('Stopping enrollment...')
       
-      setIsEnrolling(false) // Stop the video stream
-      setEnrollmentStatus('Enrollment stopped')
-      
-      // Note: In the video enrollment system, poses are collected automatically
-      // and will be available through the enrollment result or separate API calls
+      setIsEnrolling(false)
+      setEnrollmentStatus('Enrollment stopped by user')
       
     } catch (error) {
       console.error('Failed to stop enrollment:', error)
       alert('Failed to stop enrollment. Please try again.')
-      setIsEnrolling(false) // Stop the video stream even on error
-      setEnrollmentStatus('Ready')
     } finally {
+      setIsEnrolling(false)
+      setEnrollmentStatus('Ready')
       setLoading(false)
     }
   }
@@ -650,12 +649,15 @@ export default function FaceRecognitionSystem() {
     ))
   }
 
+
   const handleStartEnrollment = async () => {
     try {
       setLoading(true)
       setIsEnrolling(true)
       setEnrollmentStatus('Starting enrollment...')
       setHasCompletedEnrollment(false)
+      setEnrollmentPoses([]) // Clear previous poses
+      setProcessingStartTime(Date.now())
       
       // Prepare source configuration based on selected enrollment source
       let sourceConfig = {}
@@ -672,38 +674,58 @@ export default function FaceRecognitionSystem() {
         sourceConfig = {
           video_path: enrollmentVideoFilePath.trim()
         }
+        setEnrollmentStatus('Processing video file - this may take 1-2 minutes...')
         console.log('Starting enrollment with video file:', enrollmentVideoFilePath)
       } else if (enrollmentSource === 'camera') {
         if (!enrollmentRtspUrl.trim()) {
-          // Use default camera (index 0) if no RTSP URL provided
-          sourceConfig = {
-            camera_index: 0
-          }
-          console.log('Starting enrollment with default camera (index 0)')
-        } else {
-          sourceConfig = {
-            rtsp_url: enrollmentRtspUrl.trim()
-          }
-          console.log('Starting enrollment with RTSP camera:', enrollmentRtspUrl)
+          alert('Please enter an RTSP URL first')
+          setIsEnrolling(false)
+          setEnrollmentStatus('Ready')
+          setLoading(false)
+          return
         }
-      } else {
-        // Default to camera if no source specified
-        source = 'camera'
         sourceConfig = {
-          camera_index: 0
+          rtsp_url: enrollmentRtspUrl.trim()
         }
-        console.log('Starting enrollment with default camera')
+        setEnrollmentStatus('Connecting to RTSP stream - this may take 1-2 minutes...')
+        console.log('Starting enrollment with RTSP camera:', enrollmentRtspUrl)
+      } else {
+        alert('Please select a video source and configure it')
+        setIsEnrolling(false)
+        setEnrollmentStatus('Ready')
+        setLoading(false)
+        return
       }
       
-      // Call the multi-pose enrollment to start the process
-      const result = await apiService.startMultiPoseEnrollment(`person_${Date.now()}`, source, sourceConfig)
-      console.log('Enrollment result:', result)
+      // Call the multi-pose enrollment with timeout
+      console.log('Calling backend with config:', { source, sourceConfig })
+      console.log('API endpoint:', '/api/enrollment/multi-pose')
+      console.log('Video file path:', sourceConfig.video_path)
       
-      if (result.has_video_stream) {
-        setEnrollmentStatus('Video stream active - Move your head to collect poses')
-      } else {
-        setEnrollmentStatus('Processing enrollment (no video available)')
-        // If poses were collected immediately, show them
+      // Start progress timer
+      const startTime = Date.now()
+      const progressInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000)
+        const minutes = Math.floor(elapsed / 60)
+        const seconds = elapsed % 60
+        setEnrollmentStatus(`Processing ${enrollmentSource === 'video' ? 'video file' : 'RTSP stream'}... (${minutes}:${seconds.toString().padStart(2, '0')})`)
+      }, 1000)
+      
+      try {
+        const enrollmentPromise = apiService.startMultiPoseEnrollment(`person_${Date.now()}`, source, sourceConfig)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Enrollment timeout - processing took too long (2+ minutes)')), 120000) // 2 minutes timeout
+        )
+        
+        const result = await Promise.race([enrollmentPromise, timeoutPromise])
+        console.log('Enrollment result:', result)
+        
+        clearInterval(progressInterval)
+        
+        // Process results
+        setEnrollmentStatus('Processing completed')
+        setIsEnrolling(false)
+        
         if (result.pose_images && result.pose_images.length > 0) {
           const numberedPoses = result.pose_images.map((pose, index) => ({
             id: index + 1,
@@ -717,8 +739,16 @@ export default function FaceRecognitionSystem() {
           setReviewMode('enrollment')
           setHasCompletedEnrollment(true)
           setEnrollmentTab('review-poses')
-          setIsEnrolling(false)
+          setEnrollmentStatus(`Collected ${result.pose_images.length} poses - Review and confirm`)
+        } else {
+          setEnrollmentStatus('No poses collected - Check video source')
+          alert('No poses were collected. Please check your video file path or RTSP URL.')
         }
+      } catch (timeoutError) {
+        clearInterval(progressInterval)
+        console.error('Enrollment timeout or error:', timeoutError)
+        setEnrollmentStatus('Processing failed - timeout or error')
+        alert(`Enrollment failed: ${timeoutError.message}`)
       }
       
     } catch (error) {
@@ -731,7 +761,72 @@ export default function FaceRecognitionSystem() {
     }
   }
 
-  const handleClearEnrollmentDisplay = () => {
+  const processEnrollmentWithBackend = async () => {
+    // Prepare source configuration based on selected enrollment source
+    let sourceConfig = {}
+    let source = enrollmentSource
+    
+    if (enrollmentSource === 'video') {
+      if (!enrollmentVideoFilePath.trim()) {
+        alert('Please enter a video file path first')
+        setIsEnrolling(false)
+        setEnrollmentStatus('Ready')
+        return
+      }
+      sourceConfig = {
+        video_path: enrollmentVideoFilePath.trim()
+      }
+    } else if (enrollmentSource === 'camera') {
+      if (!enrollmentRtspUrl.trim()) {
+        // Use default camera (index 0) if no RTSP URL provided
+        sourceConfig = {
+          camera_index: 0
+        }
+      } else {
+        sourceConfig = {
+          rtsp_url: enrollmentRtspUrl.trim()
+        }
+      }
+    } else {
+      // Default to camera
+      source = 'camera'
+      sourceConfig = {
+        camera_index: 0
+      }
+    }
+    
+    // Call the multi-pose enrollment
+    const result = await apiService.startMultiPoseEnrollment(`person_${Date.now()}`, source, sourceConfig)
+    console.log('Enrollment result:', result)
+    
+    // Stop webcam
+    stopWebcamStream()
+    
+    // Process results
+    setEnrollmentStatus('Processing completed')
+    setIsEnrolling(false)
+    
+    if (result.pose_images && result.pose_images.length > 0) {
+      const numberedPoses = result.pose_images.map((pose, index) => ({
+        id: index + 1,
+        number: index + 1,
+        pose: pose.pose_name,
+        image: pose.image,
+        quality: pose.quality_score || 0,
+        type: 'enrollment'
+      }))
+      setEnrollmentPoses(numberedPoses)
+      setReviewMode('enrollment')
+      setHasCompletedEnrollment(true)
+      setEnrollmentTab('review-poses')
+      setEnrollmentStatus(`Collected ${result.pose_images.length} poses - Review and confirm`)
+    } else {
+      setEnrollmentStatus('No poses collected - Try again')
+      alert('No poses were collected. Please ensure your face is visible and try again.')
+    }
+  }
+
+  const handleClearEnrollmentDisplay = async () => {
     setIsEnrolling(false)
     setEnrollmentStatus('Ready')
     setHasCompletedEnrollment(false)
@@ -739,6 +834,10 @@ export default function FaceRecognitionSystem() {
     setPersonPoses([])
     setReviewMode('enrollment')
     setReviewingPersonId(null)
+    setSelectedPersonId('')
+    setStreamSessionId('')
+    setStreamUrl('')
+    setEnrollmentTab('live-enrollment') // Return to enrollment tab
   }
 
   // Person CRUD Functions
@@ -953,10 +1052,37 @@ export default function FaceRecognitionSystem() {
                         <CardTitle className="text-sm">Enrollment Controls</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-2">
+                        {enrollmentSource === 'video' && enrollmentVideoFilePath && (
+                          <Button 
+                            onClick={async () => {
+                              try {
+                                const response = await fetch(`http://localhost:8001/api/video/info?video_path=${encodeURIComponent(enrollmentVideoFilePath)}`)
+                                if (response.ok) {
+                                  const info = await response.json()
+                                  alert(`Video Info:\n• Duration: ${Math.round(info.duration_seconds)}s\n• Size: ${info.width}x${info.height}\n• FPS: ${Math.round(info.fps)}\n• File Size: ${info.size_mb}MB`)
+                                } else {
+                                  alert('Video file not found or cannot be opened!')
+                                }
+                              } catch (error) {
+                                alert('Error checking video file!')
+                              }
+                            }}
+                            variant="outline"
+                            className="w-full mb-2"
+                            size="sm"
+                          >
+                            Test Video File
+                          </Button>
+                        )}
+                        
                         {!isEnrolling ? (
                           <Button 
                             onClick={handleStartEnrollment} 
                             className="w-full"
+                            disabled={
+                              (enrollmentSource === 'video' && !enrollmentVideoFilePath.trim()) ||
+                              (enrollmentSource === 'camera' && !enrollmentRtspUrl.trim())
+                            }
                           >
                             Start Enrollment
                           </Button>
@@ -989,19 +1115,95 @@ export default function FaceRecognitionSystem() {
                     </Card>
                   </div>
 
-                  {/* Right Panel - Camera Feed */}
-                  <div className="flex-1 bg-black flex items-center justify-center">
+                  {/* Right Panel - Video Preview */}
+                  <div className="flex-1 bg-black flex items-center justify-center relative">
                     {isEnrolling ? (
-                      <img 
-                        src="http://localhost:8001/api/enrollment/video-stream" 
-                        alt="Live Enrollment Feed"
-                        className="max-w-full max-h-full object-contain"
-                        style={{ width: 'auto', height: 'auto' }}
-                      />
+                      <div className="w-full h-full flex flex-col items-center justify-center p-8">
+                        {/* Video Info Display */}
+                        {enrollmentSource === 'video' && enrollmentVideoFilePath && (
+                          <div className="mb-4 bg-gray-800 rounded-lg p-4 max-w-md">
+                            <div className="text-sm text-green-400 mb-2 text-center">📹 Video Processing Active</div>
+                            <div className="text-xs text-gray-400 space-y-1">
+                              <div><span className="text-white">File:</span> {enrollmentVideoFilePath.split('\\').pop()}</div>
+                              <div><span className="text-white">Status:</span> Backend analyzing frames for face poses</div>
+                              <div><span className="text-white">Progress:</span> Real-time face detection running</div>
+                            </div>
+                            <div className="mt-3 w-full bg-gray-700 rounded-full h-2">
+                              <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Processing Status */}
+                        <div className="text-white text-center">
+                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                          <div className="text-lg mb-2">{enrollmentStatus}</div>
+                          <div className="text-sm text-gray-400 max-w-md">
+                            {enrollmentSource === 'video' ? (
+                              <>
+                                <div className="font-mono text-xs break-all mb-2">
+                                  {enrollmentVideoFilePath}
+                                </div>
+                                <div>Backend is analyzing video for face poses...</div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="font-mono text-xs break-all mb-2">
+                                  {enrollmentRtspUrl}
+                                </div>
+                                <div>Connecting to RTSP stream...</div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     ) : (
-                      <div className="text-white text-center">
-                        <div className="text-lg mb-2">Live Enrollment Feed</div>
-                        <div className="text-sm text-gray-400">Click Start Enrollment to begin</div>
+                      <div className="text-white text-center p-8 max-w-md">
+                        <div className="text-lg mb-4">Video Source Enrollment</div>
+                        
+                        {/* Current Configuration Display */}
+                        <div className="bg-gray-800 rounded-lg p-4 mb-4 text-left">
+                          <div className="text-sm">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-gray-400">Source Type:</span>
+                              <span className="capitalize">{enrollmentSource}</span>
+                            </div>
+                            
+                            {enrollmentSource === 'video' ? (
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-400">Video Path:</span>
+                                <span className="text-xs truncate ml-2 max-w-48">
+                                  {enrollmentVideoFilePath || 'Not set'}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-400">RTSP URL:</span>
+                                <span className="text-xs truncate ml-2 max-w-48">
+                                  {enrollmentRtspUrl || 'Not set'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Video Info when configured */}
+                        {enrollmentSource === 'video' && enrollmentVideoFilePath && (
+                          <div className="mb-4 bg-gray-800 rounded-lg p-3">
+                            <div className="text-sm text-gray-400 mb-2">📹 Video Ready:</div>
+                            <div className="text-xs text-gray-300 space-y-1">
+                              <div>File: {enrollmentVideoFilePath.split('\\').pop()}</div>
+                              <div>Path: {enrollmentVideoFilePath}</div>
+                              <div className="text-green-400">✓ Ready for enrollment</div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="text-sm text-gray-400">
+                          {hasCompletedEnrollment 
+                            ? "Enrollment completed - Review poses in the next tab" 
+                            : "Configure source and click Start Enrollment"}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1882,13 +2084,16 @@ export default function FaceRecognitionSystem() {
                     <Label htmlFor="enrollment-video-path" className="text-sm">Video File Path:</Label>
                     <Input
                       id="enrollment-video-path"
-                      placeholder="Enter video file path (e.g., /path/to/video.mp4)"
+                      placeholder="D:/videos/face_enrollment.mp4"
                       value={enrollmentVideoFilePath}
                       onChange={(e) => setEnrollmentVideoFilePath(e.target.value)}
-                      className="w-full"
+                      className="w-full font-mono text-sm"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Supported formats: MP4, AVI, MOV, MKV
+                      Examples: D:/videos/sample.mp4, C:/Users/user/video.avi, /home/user/video.mp4
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Supported: MP4, AVI, MOV, MKV
                     </p>
                   </div>
                 )}
@@ -1903,13 +2108,16 @@ export default function FaceRecognitionSystem() {
                     <Label htmlFor="enrollment-rtsp-url" className="text-sm">RTSP URL:</Label>
                     <Input
                       id="enrollment-rtsp-url"
-                      placeholder="Enter RTSP URL (e.g., rtsp://192.168.1.100:554/stream)"
+                      placeholder="rtsp://192.168.1.100:554/stream"
                       value={enrollmentRtspUrl}
                       onChange={(e) => setEnrollmentRtspUrl(e.target.value)}
-                      className="w-full"
+                      className="w-full font-mono text-sm"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Example: rtsp://username:password@ip:port/stream
+                      Examples:<br/>
+                      • rtsp://192.168.1.100:554/stream<br/>
+                      • rtsp://admin:password@192.168.1.100:554/h264<br/>
+                      • rtsp://camera.local/live/main
                     </p>
                   </div>
                 )}

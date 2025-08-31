@@ -154,6 +154,31 @@ class ApiService {
     });
   }
 
+  // Streaming Enrollment APIs
+  async startEnrollmentStream(source: string = 'camera', sourceConfig?: any) {
+    return this.request('/api/enrollment-stream/start-stream', {
+      method: 'POST',
+      body: JSON.stringify({
+        source,
+        source_config: sourceConfig || {},
+      }),
+    });
+  }
+
+  async stopEnrollmentStream(sessionId: string) {
+    return this.request(`/api/enrollment-stream/stop-stream/${sessionId}`, {
+      method: 'POST',
+    });
+  }
+
+  async getStreamStatus(sessionId: string) {
+    return this.request(`/api/enrollment-stream/status/${sessionId}`);
+  }
+
+  getStreamUrl(sessionId: string) {
+    return `${this.baseUrl}/api/enrollment-stream/video/${sessionId}`;
+  }
+
   async capturePose(poseType: string) {
     return this.request(`/api/enrollment/capture-pose?pose_type=${poseType}`, {
       method: 'POST',
