@@ -12,6 +12,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from enum import Enum
 
 from .yunet_detector import YuNetDetector
+from .simple_detector import SimpleFaceDetector
 from .sface_recognizer import SFaceRecognizer
 from .face_aligner import FaceAligner
 from .face_quality import FaceQualityAssessment
@@ -47,15 +48,22 @@ class FaceRecognitionCombinationEngine:
         self.enable_fast_mode = True  # Enable fast processing mode
         self.detection_confidence_boost = 0.1  # Boost confidence by 10% to help with strict thresholds
         
-        print(f"✅ Face recognition engine initialized with {combination_type.value} combination")
+        print(f"SUCCESS: Face recognition engine initialized with {combination_type.value} combination")
     
     def _initialize_components(self):
         """Initialize components based on combination type"""
         if self.combination_type == CombinationType.YUNET_SFACE:
-            # Combination 1: YuNet + OpenCV SFace
-            self.detector = YuNetDetector(
-                model_path=self.model_paths.get('detector', 'models/face_detection_yunet_2023mar.onnx')
-            )
+            # Combination 1: YuNet + OpenCV SFace (with fallback)
+            try:
+                self.detector = YuNetDetector(
+                    model_path=self.model_paths.get('detector', 'models/face_detection_yunet_2023mar.onnx')
+                )
+                if not self.detector.is_available():
+                    print("WARNING: YuNet not available, using simple detector")
+                    self.detector = SimpleFaceDetector()
+            except Exception as e:
+                print(f"WARNING: YuNet failed ({e}), using simple detector")
+                self.detector = SimpleFaceDetector()
             self.recognizer = SFaceRecognizer(
                 model_path=self.model_paths.get('recognizer', 'models/face_recognition_sface_2021dec.onnx')
             )

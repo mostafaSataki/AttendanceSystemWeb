@@ -15,7 +15,8 @@ from pathlib import Path
 # Add the app directory to Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from app.api.endpoints import enrollment, recognition, people, poses, streaming
+from app.api.endpoints import enrollment_video as enrollment, recognition, people, poses
+# from app.api.endpoints import streaming  # Temporarily disabled due to jwt dependency
 from app.core.config import settings
 from app.services.face_recognition_service import FaceRecognitionService
 
@@ -23,23 +24,16 @@ from app.services.face_recognition_service import FaceRecognitionService
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    # Startup
-    print("🚀 Starting Face Recognition Service...")
-    app.state.face_service = FaceRecognitionService()
-    
-    try:
-        # Initialize the face recognition service
-        await app.state.face_service.initialize()
-        print("✅ Face Recognition Service initialized successfully")
-    except Exception as e:
-        print(f"❌ Failed to initialize Face Recognition Service: {e}")
-        # Continue anyway - the service can be initialized later
+    # Startup  
+    print("Starting Video Enrollment Service...")
+    # Use simple face service for video enrollment
+    app.state.face_service = None
     
     yield
     
     # Shutdown
-    print("🛑 Shutting down Face Recognition Service...")
-    if hasattr(app.state, 'face_service'):
+    print("Shutting down Face Recognition Service...")
+    if hasattr(app.state, 'face_service') and app.state.face_service:
         await app.state.face_service.cleanup()
 
 
@@ -53,7 +47,7 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],  # Allow all origins for debugging
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,7 +58,7 @@ app.include_router(enrollment.router, prefix="/api/enrollment", tags=["enrollmen
 app.include_router(recognition.router, prefix="/api/recognition", tags=["recognition"])
 app.include_router(people.router, prefix="/api/people", tags=["people"])
 app.include_router(poses.router, prefix="/api/poses", tags=["poses"])
-app.include_router(streaming.router, prefix="/api/stream", tags=["streaming"])
+# app.include_router(streaming.router, prefix="/api/stream", tags=["streaming"])  # Temporarily disabled
 
 
 @app.get("/")
@@ -87,7 +81,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8001,
         reload=True,
         log_level="info"
     )

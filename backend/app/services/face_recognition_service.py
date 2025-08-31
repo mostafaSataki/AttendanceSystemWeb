@@ -34,7 +34,7 @@ try:
     from deepface import DeepFace
     DEEPFACE_AVAILABLE = True
 except ImportError:
-    print("⚠️ DeepFace not available. Face recognition will be limited.")
+    print("WARNING: DeepFace not available. Face recognition will be limited.")
     DEEPFACE_AVAILABLE = False
 
 @dataclass
@@ -292,11 +292,11 @@ class FaceDetector:
                     self.use_haar = True
                     self.use_yunet = False
                     self.net = None
-                    print("✅ Using Haar cascade detector as final fallback")
+                    print("SUCCESS: Using Haar cascade detector as final fallback")
                 else:
                     raise Exception("Haar cascade failed to load")
             except Exception as final_error:
-                print(f"❌ Final fallback failed: {final_error}")
+                print(f"ERROR: Final fallback failed: {final_error}")
                 raise Exception("No face detection method available")
     
     def detect(self, frame: np.ndarray) -> List[Detection]:
@@ -364,7 +364,7 @@ class FaceDetector:
                             confidence=confidence
                         ))
         except Exception as e:
-            print(f"⚠️ Face detection failed: {e}")
+            print(f"WARNING: Face detection failed: {e}")
         
         # Update detection history for adaptive threshold
         self._update_detection_history(len(detections))
@@ -430,7 +430,7 @@ class FaceVerifier:
             
             return np.array(embedding[0]["embedding"])
         except Exception as e:
-            print(f"❌ Error extracting embedding: {e}")
+            print(f"ERROR: Error extracting embedding: {e}")
             return None
     
     def verify_embedding_against_database(self, face_embedding: np.ndarray, 
@@ -477,7 +477,7 @@ class FaceVerifier:
                         best_match = person_name
                         
                 except Exception as e:
-                    print(f"⚠️ Error comparing embedding for {person_name}-{pose_name}: {e}")
+                    print(f"WARNING: Error comparing embedding for {person_name}-{pose_name}: {e}")
                     continue
         
         return best_match, best_confidence
@@ -1146,7 +1146,7 @@ class FaceRecognitionService:
         # Initialize components
         print(f"🔧 Initializing FaceDetector with confidence threshold: {confidence_threshold}")
         self.detector = FaceDetector(confidence_threshold=confidence_threshold)
-        print(f"✅ FaceDetector initialized successfully")
+        print(f"SUCCESS: FaceDetector initialized successfully")
         self.verifier = FaceVerifier(
             recognition_model=recognition_model,
             detector_backend=detector_backend
@@ -1188,7 +1188,7 @@ class FaceRecognitionService:
         # Initialization status
         self.is_initialized = False
         
-        print("✅ Face Recognition Service initialized")
+        print("SUCCESS: Face Recognition Service initialized")
         print(f"🔧 Detection: Enhanced FaceDetector with YuNet support and adaptive threshold")
         print(f"🔧 Recognition: DeepFace {recognition_model} model" if self.verifier else "🔧 Recognition: DISABLED (DeepFace not available)")
         print(f"🔧 Tracker: {self.tracker_type.upper()} with robustness features")
@@ -1204,13 +1204,13 @@ class FaceRecognitionService:
                 enrollment_service = BackendEnrollmentService()
                 self.load_embeddings_database(enrollment_service)
             except Exception as e:
-                print(f"⚠️ Could not load enrollment database: {e}")
+                print(f"WARNING: Could not load enrollment database: {e}")
             
             self.is_initialized = True
-            print("✅ Face Recognition Service fully initialized")
+            print("SUCCESS: Face Recognition Service fully initialized")
             
         except Exception as e:
-            print(f"❌ Failed to initialize Face Recognition Service: {e}")
+            print(f"ERROR: Failed to initialize Face Recognition Service: {e}")
             self.is_initialized = False
             raise
     
@@ -1218,9 +1218,9 @@ class FaceRecognitionService:
         """Cleanup resources"""
         try:
             self.is_running = False
-            print("✅ Face Recognition Service cleaned up")
+            print("SUCCESS: Face Recognition Service cleaned up")
         except Exception as e:
-            print(f"⚠️ Error during cleanup: {e}")
+            print(f"WARNING: Error during cleanup: {e}")
     
     async def start_enrollment(self, video_path=None):
         """Start enrollment session with video processing"""
@@ -1232,23 +1232,23 @@ class FaceRecognitionService:
             if video_path:
                 print(f"🎬 Attempting to open video file: {video_path}")
                 if os.path.exists(video_path):
-                    print(f"✅ Video file exists, opening capture...")
+                    print(f"SUCCESS: Video file exists, opening capture...")
                     self.current_capture = cv2.VideoCapture(video_path)
                     if not self.current_capture.isOpened():
-                        print(f"❌ Failed to open video capture")
+                        print(f"ERROR: Failed to open video capture")
                         return {
                             "success": False,
                             "error": f"Could not open video file: {video_path}"
                         }
-                    print(f"✅ Video capture started successfully: {video_path}")
+                    print(f"SUCCESS: Video capture started successfully: {video_path}")
                 else:
-                    print(f"❌ Video file does not exist: {video_path}")
+                    print(f"ERROR: Video file does not exist: {video_path}")
                     return {
                         "success": False,
                         "error": f"Video file not found: {video_path}"
                     }
             else:
-                print(f"⚠️ No video path provided, starting basic enrollment")
+                print(f"WARNING: No video path provided, starting basic enrollment")
             
             return {
                 "success": True,
@@ -1272,7 +1272,7 @@ class FaceRecognitionService:
             if self.current_capture is not None:
                 self.current_capture.release()
                 self.current_capture = None
-                print("✅ Video capture stopped and released")
+                print("SUCCESS: Video capture stopped and released")
             
             self.current_video_path = None
             self.current_frame = None
@@ -1327,10 +1327,10 @@ class FaceRecognitionService:
         try:
             self.embeddings_database = enrollment_service.get_all_person_embeddings()
             total_embeddings = sum(len(embeddings) for embeddings in self.embeddings_database.values())
-            print(f"✅ Loaded {total_embeddings} embeddings for {len(self.embeddings_database)} persons")
+            print(f"SUCCESS: Loaded {total_embeddings} embeddings for {len(self.embeddings_database)} persons")
             return True
         except Exception as e:
-            print(f"❌ Error loading embeddings database: {e}")
+            print(f"ERROR: Error loading embeddings database: {e}")
             return False
     
     def process_frame(self, frame: np.ndarray) -> Dict:
@@ -1369,7 +1369,7 @@ class FaceRecognitionService:
                 verification_time = time.time() - start_time
             else:
                 if self.frame_count % 60 == 1:  # Debug every 60 frames
-                    print(f"⚠️ Frame {self.frame_count}: Face verification disabled - Verifier: {self.verifier is not None}, Database: {len(self.embeddings_database) if self.embeddings_database else 0} persons")
+                    print(f"WARNING: Frame {self.frame_count}: Face verification disabled - Verifier: {self.verifier is not None}, Database: {len(self.embeddings_database) if self.embeddings_database else 0} persons")
             
             # Update state
             self.current_detections = detections
@@ -1390,7 +1390,7 @@ class FaceRecognitionService:
             }
             
         except Exception as e:
-            print(f"❌ Error processing frame: {e}")
+            print(f"ERROR: Error processing frame: {e}")
             return {
                 'success': False,
                 'error': str(e),
@@ -1400,7 +1400,7 @@ class FaceRecognitionService:
     def _verify_face(self, frame: np.ndarray, track: Track) -> None:
         """Verify face identity for a track"""
         if not self.verifier or not self.embeddings_database:
-            print(f"⚠️ Track {track.track_id}: Verification skipped - Verifier: {self.verifier is not None}, Database: {len(self.embeddings_database) if self.embeddings_database else 0}")
+            print(f"WARNING: Track {track.track_id}: Verification skipped - Verifier: {self.verifier is not None}, Database: {len(self.embeddings_database) if self.embeddings_database else 0}")
             return
         
         # Skip verification if permanent face ID is already assigned
@@ -1451,7 +1451,7 @@ class FaceRecognitionService:
                     )
                     print(f"🔍 Track {track.track_id}: Verification result: {face_id} (confidence: {confidence:.3f})")
                 else:
-                    print(f"⚠️ Track {track.track_id}: Failed to extract face embedding")
+                    print(f"WARNING: Track {track.track_id}: Failed to extract face embedding")
                     return
                 
                 # Implement voting system
@@ -1472,7 +1472,7 @@ class FaceRecognitionService:
                             track.permanent_face_id = voted_face_id
                             track.face_id = voted_face_id
                             track.face_confidence = confidence
-                            print(f"✅ Track {track.track_id}: CONFIRMED as {voted_face_id} (after {votes} votes)")
+                            print(f"SUCCESS: Track {track.track_id}: CONFIRMED as {voted_face_id} (after {votes} votes)")
                             return
                     
                     # Update current best guess
@@ -1486,7 +1486,7 @@ class FaceRecognitionService:
                     track.face_id = "Unknown"
                     track.face_confidence = 0.0
             except Exception as e:
-                print(f"❌ Error during face verification for track {track.track_id}: {e}")
+                print(f"ERROR: Error during face verification for track {track.track_id}: {e}")
                 track.last_verification_frame = self.frame_count
     
     def get_annotated_frame(self, frame: np.ndarray, show_detections: bool = True, show_tracks: bool = True, show_names: bool = True, show_regions: bool = False) -> np.ndarray:

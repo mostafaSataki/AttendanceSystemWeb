@@ -2,7 +2,7 @@
  * API Service for Face Recognition Attendance System
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
 
 class ApiService {
   private baseUrl: string;
@@ -128,18 +128,23 @@ class ApiService {
   }
 
   // Face Enrollment APIs
-  async startEnrollment(source?: string, sourceConfig?: any) {
-    const body: any = {};
-    if (source) {
-      body.source = source;
-    }
-    if (sourceConfig) {
-      body.source_config = sourceConfig;
-    }
+  async startEnrollment(source?: string, sourceConfig?: any, personName?: string) {
+    // Use multi-pose endpoint since /start doesn't exist
+    return this.startMultiPoseEnrollment(
+      personName || `user_${Date.now()}`, 
+      source || 'camera', 
+      sourceConfig
+    );
+  }
 
-    return this.request('/api/enrollment/start', {
+  async startMultiPoseEnrollment(personName: string, source: string = 'camera', sourceConfig?: any) {
+    return this.request('/api/enrollment/multi-pose', {
       method: 'POST',
-      body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
+      body: JSON.stringify({
+        person_name: personName,
+        source,
+        source_config: sourceConfig || {},
+      }),
     });
   }
 

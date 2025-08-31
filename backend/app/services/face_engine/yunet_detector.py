@@ -28,35 +28,68 @@ class YuNetDetector:
         self._initialize()
     
     def _initialize(self):
-        """Initialize YuNet detector"""
+        """Initialize YuNet detector with fallback for older OpenCV"""
         try:
             if not os.path.exists(self.model_path):
-                print(f"❌ YuNet model not found at: {self.model_path}")
+                print(f"ERROR: YuNet model not found at: {self.model_path}")
+                return self._initialize_fallback()
+            
+            # Try to use YuNet if available (OpenCV 4.8+)
+            if hasattr(cv2, 'FaceDetectorYN'):
+                self.detector = cv2.FaceDetectorYN.create(
+                    model=self.model_path,
+                    config="",
+                    input_size=self.input_size,
+                    score_threshold=self.confidence_threshold,
+                    nms_threshold=self.nms_threshold
+                )
+                
+                if self.detector is None:
+                    print(f"ERROR: Failed to create YuNet detector")
+                    return self._initialize_fallback()
+                
+                print(f"SUCCESS: YuNet detector initialized with confidence: {self.confidence_threshold}")
+                self.use_fallback = False
+                return True
+            else:
+                print(f"WARNING: OpenCV {cv2.__version__} doesn't support FaceDetectorYN, using fallback")
+                return self._initialize_fallback()
+            
+        except Exception as e:
+            print(f"ERROR: Failed to initialize YuNet detector: {e}")
+            return self._initialize_fallback()
+    
+    def _initialize_fallback(self):
+        """Initialize fallback face detector using Haar cascades"""
+        try:
+            # Use Haar cascade as fallback
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            self.detector = cv2.CascadeClassifier(cascade_path)
+            
+            if self.detector.empty():
+                print("ERROR: Failed to load Haar cascade detector")
                 return False
             
-            self.detector = cv2.FaceDetectorYN.create(
-                model=self.model_path,
-                config="",
-                input_size=self.input_size,
-                score_threshold=self.confidence_threshold,
-                nms_threshold=self.nms_threshold
-            )
-            
-            if self.detector is None:
-                print(f"❌ Failed to create YuNet detector")
-                return False
-            
-            print(f"✅ YuNet detector initialized with confidence: {self.confidence_threshold}")
+            print("SUCCESS: Fallback Haar cascade detector initialized")
+            self.use_fallback = True
             return True
             
         except Exception as e:
-            print(f"❌ Failed to initialize YuNet detector: {e}")
+            print(f"ERROR: Failed to initialize fallback detector: {e}")
             return False
     
     def detect_faces(self, frame: np.ndarray) -> List[dict]:
-        """Detect faces using YuNet with optimizations"""
+        """Detect faces using YuNet or fallback detector"""
         if self.detector is None:
             return []
+        
+        if getattr(self, 'use_fallback', False):
+            return self._detect_faces_fallback(frame)
+        else:
+            return self._detect_faces_yunet(frame)
+    
+    def _detect_faces_yunet(self, frame: np.ndarray) -> List[dict]:
+        """Detect faces using YuNet"""
         
         try:
             height, width = frame.shape[:2]
@@ -102,8 +135,39 @@ class YuNetDetector:
             return detections
             
         except Exception as e:
-            # Avoid printing errors for every frame with no faces
-            # print(f"❌ YuNet detection error: {e}")
+            print(f"❌ YuNet detection error: {e}")
+            return []
+    
+    def _detect_faces_fallback(self, frame: np.ndarray) -> List[dict]:
+        """Detect faces using Haar cascade fallback"""
+        try:
+            # Convert to grayscale for Haar cascade
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # Detect faces
+            faces = self.detector.detectMultiScale(
+                gray,
+                scaleFactor=1.1,
+                minNeighbors=5,
+                minSize=(30, 30),
+                flags=cv2.CASCADE_SCALE_IMAGE
+            )
+            
+            detections = []
+            for (x, y, w, h) in faces:
+                # Convert to YuNet-compatible format
+                detection = {
+                    'bbox': [x, y, w, h],
+                    'confidence': 0.8,  # Fixed confidence for Haar
+                    'landmarks': [],  # No landmarks in Haar
+                    'x': x, 'y': y, 'w': w, 'h': h
+                }
+                detections.append(detection)
+            
+            return detections
+            
+        except Exception as e:
+            print(f"ERROR: Haar cascade detection failed: {e}")
             return []
     
     def is_available(self) -> bool:

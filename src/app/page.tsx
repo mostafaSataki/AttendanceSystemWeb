@@ -373,25 +373,17 @@ export default function FaceRecognitionSystem() {
       const result = await apiService.stopEnrollment()
       console.log('Enrollment stopped:', result)
       
-      // Convert collected poses to numbered format
-      const numberedPoses = poseOrder.map((pose, index) => ({
-        id: index + 1,
-        number: index + 1,
-        pose: pose,
-        image: `/api/placeholder/120/120`, // This would be the actual captured image
-        quality: Math.random() * 0.5 + 0.5, // Mock quality for now
-        type: 'enrollment' // Mark as enrollment pose
-      }))
-      
-      setEnrollmentPoses(numberedPoses)
-      setReviewMode('enrollment')
-      setHasCompletedEnrollment(true)
-      setEnrollmentTab('review-poses')
       setIsEnrolling(false) // Stop the video stream
+      setEnrollmentStatus('Enrollment stopped')
+      
+      // Note: In the video enrollment system, poses are collected automatically
+      // and will be available through the enrollment result or separate API calls
+      
     } catch (error) {
       console.error('Failed to stop enrollment:', error)
       alert('Failed to stop enrollment. Please try again.')
       setIsEnrolling(false) // Stop the video stream even on error
+      setEnrollmentStatus('Ready')
     } finally {
       setLoading(false)
     }
@@ -671,7 +663,7 @@ export default function FaceRecognitionSystem() {
       
       if (enrollmentSource === 'video') {
         if (!enrollmentVideoFilePath.trim()) {
-          alert('Please select a video file path first')
+          alert('Please enter a video file path first')
           setIsEnrolling(false)
           setEnrollmentStatus('Ready')
           setLoading(false)
@@ -683,27 +675,52 @@ export default function FaceRecognitionSystem() {
         console.log('Starting enrollment with video file:', enrollmentVideoFilePath)
       } else if (enrollmentSource === 'camera') {
         if (!enrollmentRtspUrl.trim()) {
-          alert('Please enter an RTSP URL first')
-          setIsEnrolling(false)
-          setEnrollmentStatus('Ready')
-          setLoading(false)
-          return
+          // Use default camera (index 0) if no RTSP URL provided
+          sourceConfig = {
+            camera_index: 0
+          }
+          console.log('Starting enrollment with default camera (index 0)')
+        } else {
+          sourceConfig = {
+            rtsp_url: enrollmentRtspUrl.trim()
+          }
+          console.log('Starting enrollment with RTSP camera:', enrollmentRtspUrl)
         }
-        sourceConfig = {
-          rtsp_url: enrollmentRtspUrl.trim()
-        }
-        console.log('Starting enrollment with RTSP camera:', enrollmentRtspUrl)
       } else {
         // Default to camera if no source specified
         source = 'camera'
-        sourceConfig = {}
+        sourceConfig = {
+          camera_index: 0
+        }
         console.log('Starting enrollment with default camera')
       }
       
-      // Call backend API with source and configuration
-      const result = await apiService.startEnrollment(source, sourceConfig)
-      console.log('Enrollment started:', result)
-      setEnrollmentStatus(`Enrolling - Processing ${source === 'video' ? 'video' : 'camera feed'}`)
+      // Call the multi-pose enrollment to start the process
+      const result = await apiService.startMultiPoseEnrollment(`person_${Date.now()}`, source, sourceConfig)
+      console.log('Enrollment result:', result)
+      
+      if (result.has_video_stream) {
+        setEnrollmentStatus('Video stream active - Move your head to collect poses')
+      } else {
+        setEnrollmentStatus('Processing enrollment (no video available)')
+        // If poses were collected immediately, show them
+        if (result.pose_images && result.pose_images.length > 0) {
+          const numberedPoses = result.pose_images.map((pose, index) => ({
+            id: index + 1,
+            number: index + 1,
+            pose: pose.pose_name,
+            image: pose.image,
+            quality: pose.quality_score || 0,
+            type: 'enrollment'
+          }))
+          setEnrollmentPoses(numberedPoses)
+          setReviewMode('enrollment')
+          setHasCompletedEnrollment(true)
+          setEnrollmentTab('review-poses')
+          setIsEnrolling(false)
+        }
+      }
+      
     } catch (error) {
       console.error('Failed to start enrollment:', error)
       alert(`Failed to start enrollment: ${error.message || 'Please try again.'}`)
@@ -976,7 +993,7 @@ export default function FaceRecognitionSystem() {
                   <div className="flex-1 bg-black flex items-center justify-center">
                     {isEnrolling ? (
                       <img 
-                        src="http://localhost:8000/api/enrollment/video-stream" 
+                        src="http://localhost:8001/api/enrollment/video-stream" 
                         alt="Live Enrollment Feed"
                         className="max-w-full max-h-full object-contain"
                         style={{ width: 'auto', height: 'auto' }}

@@ -41,14 +41,14 @@ class FaceQualityAssessment:
                     providers=providers,
                     sess_options=session_options
                 )
-                print(f"✅ Face quality assessor initialized successfully")
+                print(f"SUCCESS: Face quality assessor initialized successfully")
                 return True
             
-            print(f"⚠️ Quality assessment model not found, using fallback methods")
+            print(f"WARNING: Quality assessment model not found, using fallback methods")
             return False
             
         except Exception as e:
-            print(f"❌ Failed to initialize quality assessor: {e}")
+            print(f"ERROR: Failed to initialize quality assessor: {e}")
             return False
     
     def assess_quality(self, face_roi: np.ndarray) -> Optional[float]:

@@ -17,7 +17,7 @@ try:
     from deepface import DeepFace
     DEEPFACE_AVAILABLE = True
 except ImportError:
-    print("⚠️ DeepFace not available. Embeddings will be generated using existing face engine.")
+    print("WARNING: DeepFace not available. Embeddings will be generated using existing face engine.")
     DEEPFACE_AVAILABLE = False
 
 from .face_engine import FaceRecognitionCombinationEngine, CombinationType
@@ -56,11 +56,11 @@ class BackendEnrollmentService:
         self.detector_backend = "opencv"
         self.recognition_model = "SFace"
         
-        print(f"✅ Backend enrollment service initialized")
+        print(f"SUCCESS: Backend enrollment service initialized")
         if DEEPFACE_AVAILABLE:
-            print(f"✅ DeepFace available for embedding generation (model: {self.recognition_model})")
+            print(f"SUCCESS: DeepFace available for embedding generation (model: {self.recognition_model})")
         else:
-            print(f"⚠️ Will use existing face engine for embedding generation")
+            print(f"WARNING: Will use existing face engine for embedding generation")
 
     def _load_enrollment_database(self) -> Dict[str, Any]:
         """Load enrollment database"""

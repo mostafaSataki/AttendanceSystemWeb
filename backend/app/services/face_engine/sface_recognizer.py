@@ -42,12 +42,12 @@ class SFaceRecognizer:
             self.input_name = self.session.get_inputs()[0].name
             self.input_shape = self.session.get_inputs()[0].shape
             
-            print(f"✅ SFace recognizer initialized successfully")
+            print(f"SUCCESS: SFace recognizer initialized successfully")
             print(f"   Input shape: {self.input_shape}")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to initialize SFace recognizer: {e}")
+            print(f"ERROR: Failed to initialize SFace recognizer: {e}")
             return False
     
     def generate_embedding(self, face_roi: np.ndarray) -> Optional[np.ndarray]:

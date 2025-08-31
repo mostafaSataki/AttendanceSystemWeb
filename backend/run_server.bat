@@ -30,11 +30,11 @@ if errorlevel 1 (
 )
 
 REM Start the server
-echo Starting server on http://localhost:8000
-echo API documentation will be available at http://localhost:8000/docs
+echo Starting server on http://localhost:8001
+echo API documentation will be available at http://localhost:8001/docs
 echo.
 
 cd /d "%~dp0"
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
 pause
