@@ -153,14 +153,46 @@ async def get_video_stream():
                 cv2.putText(frame, "Look at camera and move your head", (10, 70), 
                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
                 
-                # Add a simple face detection rectangle (mock)
-                h, w = frame.shape[:2]
-                center_x, center_y = w // 2, h // 2
-                rect_size = 150
-                cv2.rectangle(frame, 
-                            (center_x - rect_size, center_y - rect_size), 
-                            (center_x + rect_size, center_y + rect_size), 
-                            (0, 255, 0), 2)
+                # Add actual face detection rectangles
+                try:
+                    from app.services.face_recognition_service import FaceDetector
+                    
+                    # Initialize face detector (you might want to reuse one from app state)
+                    if not hasattr(generate_frames, 'face_detector'):
+                        generate_frames.face_detector = FaceDetector(confidence_threshold=0.5)
+                    
+                    # Detect actual faces
+                    detections = generate_frames.face_detector.detect(frame)
+                    
+                    # Draw rectangles for all detected faces
+                    for detection in detections:
+                        x, y, w, h = detection.bbox
+                        confidence = detection.confidence
+                        
+                        # Draw face bounding box
+                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                        
+                        # Add confidence label
+                        cv2.putText(frame, f"Face: {confidence:.2f}", 
+                                  (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    
+                    # If no faces detected, show a message
+                    if len(detections) == 0:
+                        cv2.putText(frame, "No faces detected", (10, 100), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    
+                except Exception as face_error:
+                    print(f"Face detection error: {face_error}")
+                    # Fallback to center rectangle if face detection fails
+                    h, w = frame.shape[:2]
+                    center_x, center_y = w // 2, h // 2
+                    rect_size = 150
+                    cv2.rectangle(frame, 
+                                (center_x - rect_size, center_y - rect_size), 
+                                (center_x + rect_size, center_y + rect_size), 
+                                (255, 0, 0), 2)  # Red for fallback
+                    cv2.putText(frame, "Face detection unavailable", (10, 100), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
                 
                 # Encode frame
                 _, buffer = cv2.imencode('.jpg', frame)
