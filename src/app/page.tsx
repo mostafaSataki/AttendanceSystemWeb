@@ -1119,17 +1119,52 @@ export default function FaceRecognitionSystem() {
                   <div className="flex-1 bg-black flex items-center justify-center relative">
                     {isEnrolling ? (
                       <div className="w-full h-full flex flex-col items-center justify-center p-8">
-                        {/* Video Info Display */}
+                        {/* Video Processing Visualization */}
                         {enrollmentSource === 'video' && enrollmentVideoFilePath && (
-                          <div className="mb-4 bg-gray-800 rounded-lg p-4 max-w-md">
-                            <div className="text-sm text-green-400 mb-2 text-center">📹 Video Processing Active</div>
-                            <div className="text-xs text-gray-400 space-y-1">
-                              <div><span className="text-white">File:</span> {enrollmentVideoFilePath.split('\\').pop()}</div>
-                              <div><span className="text-white">Status:</span> Backend analyzing frames for face poses</div>
-                              <div><span className="text-white">Progress:</span> Real-time face detection running</div>
-                            </div>
-                            <div className="mt-3 w-full bg-gray-700 rounded-full h-2">
-                              <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                          <div className="mb-4">
+                            <div className="bg-gradient-to-r from-blue-600 to-green-600 rounded-lg p-4 max-w-md shadow-lg">
+                              <div className="text-white text-center mb-3">
+                                <div className="text-lg font-bold">🎬 Video Processing</div>
+                                <div className="text-sm opacity-90">Real-time Face Detection Active</div>
+                              </div>
+                              
+                              {/* Animated Processing Visualization */}
+                              <div className="bg-black rounded p-3 mb-3">
+                                <div className="flex justify-center items-center h-32">
+                                  {/* Simulated video frames */}
+                                  <div className="grid grid-cols-3 gap-1">
+                                    {[1,2,3,4,5,6,7,8,9].map(i => (
+                                      <div 
+                                        key={i} 
+                                        className="w-8 h-6 bg-blue-400 rounded animate-pulse"
+                                        style={{ 
+                                          animationDelay: `${i * 0.2}s`,
+                                          backgroundColor: i % 3 === 0 ? '#60a5fa' : i % 3 === 1 ? '#34d399' : '#f59e0b'
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="text-center text-xs text-gray-400 mt-2">
+                                  Processing frames from: {enrollmentVideoFilePath.split('\\').pop()}
+                                </div>
+                              </div>
+                              
+                              {/* Progress indicators */}
+                              <div className="space-y-2 text-sm">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-200">Face Detection:</span>
+                                  <span className="text-green-300 animate-pulse">● ACTIVE</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-200">Pose Analysis:</span>
+                                  <span className="text-green-300 animate-pulse">● RUNNING</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-200">Quality Check:</span>
+                                  <span className="text-yellow-300 animate-pulse">● ANALYZING</span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         )}
