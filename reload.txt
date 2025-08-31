@@ -1,0 +1,18 @@
+please run this command on server :
+
+
+git clone https://github.com/mostafaSataki/AttendanceSystemWeb.git /tmp/AttendanceSystemWeb && rsync -a --delete --exclude='.git' /tmp/AttendanceSystemWeb/ /home/z/my-project/
+
+
+wget -O /home/z/my-project/backend/models.zip https://github.com/mostafaSataki/AttendanceSystemWeb/releases/download/Models/models.zip && unzip -o /home/z/my-project/backend/models.zip -d /home/z/my-project/backend && rm /home/z/my-project/backend/models.zip
+
+
+wget -O /home/z/my-project/backend/enrollments.zip https://github.com/mostafaSataki/AttendanceSystemWeb/releases/download/Models/enrollments.zip && unzip -o /home/z/my-project/backend/enrollments.zip -d /home/z/my-project/backend && rm /home/z/my-project/backend/enrollments.zip
+
+
+python -m venv /home/z/my-project/backend/.venv && source /home/z/my-project/backend/.venv/bin/activate && pip install -r /home/z/my-project/backend/requirements_face_recognition.txt
+
+
+run in another terminal : /home/z/my-project/backend/run_server.sh
+
+/home/z/my-project/backend/enrollments/esmail.mp4
